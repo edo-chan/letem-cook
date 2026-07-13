@@ -1,6 +1,6 @@
 ---
 name: letem-cook
-description: Manage a persistent local home-kitchen memory that connects Markdown ingredient and leftover inventory, cooking history, usual meal size, and food preferences with a personal recipe library, inspiration, substitutions, and variations. Use when a user wants to record groceries or pantry changes, prioritize prepared leftovers as a meal, cook from ingredients on hand, finish a cooking session and reconcile leftovers, remember household meal patterns or preferences, reduce food waste, save or adapt recipes, plan meals, brainstorm dishes, or initialize and maintain a Let Em Cook workspace.
+description: Manage a persistent local home-kitchen memory that connects Markdown ingredient and leftover inventory, cooking history, usual meal size, per-person flavor profiles, and summarized meal feedback with a personal recipe library, inspiration, substitutions, and variations. Use when a user wants to record groceries or pantry changes, prioritize prepared leftovers as a meal, cook from ingredients on hand, finish a cooking session and reconcile leftovers, capture what different people thought of a meal, remember household meal patterns or individual flavor preferences, reduce food waste, save or adapt recipes, plan meals, brainstorm dishes, or initialize and maintain a Let Em Cook workspace.
 ---
 
 # Let Em Cook
@@ -13,6 +13,7 @@ Resolve the kitchen workspace from `LETEM_COOK_HOME` when set; otherwise use `~/
 
 - `inventory.md` for the canonical current ingredient inventory
 - `cooking-log.md` for pending post-cook checks and recent outcomes
+- `people.md` for per-person flavor profiles and evidence counts
 - `profile.md` for usual meal size, diners, constraints, and preferences
 - `recipes.json` when saved recipes matter
 - `inspiration.json` when ideas or variations matter
@@ -57,24 +58,45 @@ Treat post-cook reconciliation as mandatory, not optional.
 
 1. When cooking begins, add the meal under `Pending inventory check` in `cooking-log.md`.
 2. After the final cooking step, or as soon as the user says they finished cooking, ask: **“Are there any ingredients left? If so, what is left and about how much? How many portions of the cooked meal are left?”**
-3. Ask where prepared leftovers were stored and their use-by date when those facts are unknown. Also ask how the dish turned out and whether they would make it again when the user has not already said.
+3. Ask where prepared leftovers were stored and their use-by date when those facts are unknown. Ask who ate the meal, what each person thought, and whether each would make it again when that feedback was not already supplied.
 4. Wait for the answer before changing consumed quantities. Do not deduct the recipe's planned amounts automatically.
 5. Update every affected row in `inventory.md`, including partial amounts, newly opened state, discarded food, and prepared leftovers. Record each prepared leftover as a meal-ready inventory row instead of only mentioning it in the cooking log.
 6. Update `Last updated`, append the result under `Cooked meals`, and remove the matching pending check.
-7. Update the saved recipe's `last_cooked`, rating, or notes only when the user supplied those facts.
+7. Summarize attributed feedback in the cooking log, then update `people.md` and the saved recipe's `last_cooked`, rating, or notes only from supplied facts or supported patterns.
 8. Run validation and briefly confirm the memory changes.
 
 If the user does not answer the leftover question, leave the pending check in the log and do not invent an inventory update. At the start of the next kitchen interaction, ask to resolve that pending check before claiming the inventory is current.
 
 ## Maintain meal size and preferences
 
-- Treat `profile.md` as the source of truth for the user's usual meal size and durable preferences.
+- Treat `profile.md` as the source of truth for household-wide meal patterns and shared defaults. Keep person-specific preferences in `people.md`.
 - If usual meal size is unknown, ask once before scaling a recipe or planning portions. Store the answer as servings and note the usual number of diners when supplied.
 - Scale recipe recommendations to the usual meal size by default, then account for deliberately requested leftover portions.
-- Record explicit likes, dislikes, dietary restrictions, allergies, cuisines, spice level, textures, effort, and leftover preferences.
+- Record household-wide likes, dislikes, dietary restrictions, allergies, cuisines, spice level, textures, effort, and leftover preferences only when they genuinely apply to the household.
 - Keep recipe-specific feedback in the recipe or cooking log. Promote it to a general preference only when the user states it generally or a repeated pattern supports it.
 - Never infer an allergy or dietary restriction from a dislike, nor erase an existing restriction without explicit confirmation.
+- Do not let a household default overwrite a named person's profile.
 - Update the profile timestamp whenever persistent preferences change.
+
+## Capture people's flavor profiles
+
+- Treat `people.md` as the source of truth for individual flavor preferences. Use a stable name or user-approved label for each person.
+- Capture salt, sweetness, acidity, bitterness, umami, heat, richness, aromatics, texture, doneness, cuisines, likes, dislikes, dietary restrictions, and allergies when known.
+- Attribute feedback to the person who gave it. Do not turn “everyone liked it” into individual preferences unless the participants are identified.
+- Keep a one-meal reaction in `cooking-log.md`. Promote it into a person's durable profile only when they state a general preference or repeated feedback supports a pattern.
+- Increment the evidence count and update `Last feedback` whenever a meal contributes to a durable profile.
+- Preserve contradictions. Prefer “liked this spicy curry but usually asks for mild heat” over silently replacing either fact.
+- Never let group consensus override one person's allergy or dietary restriction.
+
+For each meal with feedback from multiple people, write this summary under the meal in `cooking-log.md`:
+
+- **Feedback by person:** concise attributed reactions
+- **Shared themes:** points of agreement, including the number of people when known
+- **Differences:** disagreements or person-specific reactions
+- **Next-time changes:** concrete adjustments and who they serve
+- **Profile updates:** durable preferences changed, or `none` when feedback was meal-specific
+
+Do not treat silence as approval, calculate a false consensus, or erase minority feedback. When feedback is incomplete, say who has not responded.
 
 ## Maintain recipes
 
@@ -94,7 +116,7 @@ Rank options using this order:
 4. user constraints such as time, equipment, effort, and usual meal size
 5. ingredients that should be used soon
 6. pantry coverage and missing required ingredients
-7. user preferences, ratings, and variety from recent meals
+7. relevant people's flavor profiles, ratings, and variety from recent meals
 
 Offer a safe leftover as the default next meal when it can cover the requested diners. If it is short on portions, suggest a simple side or combine compatible leftovers. Respect an explicit request to cook something new, but still mention leftovers that need attention soon. Never recommend a leftover as safe when storage history is unknown or questionable.
 
@@ -106,7 +128,7 @@ python3 <skill-directory>/scripts/kitchen.py match <kitchen-directory> --top 5 -
 
 The match command prints ready leftovers before recipe candidates. Treat name-based recipe matches as candidates, not proof that quantities are sufficient. Check quantities and units before presenting a recipe as fully cookable.
 
-For each recommendation, report why it fits now, what it uses, what is missing or uncertain, relevant constraints, and one useful variation when it adds value.
+For each recommendation, report why it fits now, what it uses, what is missing or uncertain, relevant constraints, whose flavor profile it serves, and one useful variation when it adds value. For groups, find overlap first and offer a split seasoning, sauce, garnish, or doneness strategy when preferences differ.
 
 ## Capture inspiration and variations
 

@@ -1,6 +1,6 @@
 # Kitchen memory model
 
-Let Em Cook uses three Markdown memory files and two structured JSON stores. Dates use `YYYY-MM-DD`; timestamps use ISO 8601 UTC.
+Let Em Cook uses four Markdown memory files and two structured JSON stores. Dates use `YYYY-MM-DD`; timestamps use ISO 8601 UTC.
 
 ## `inventory.md`
 
@@ -37,13 +37,53 @@ Use this file for the post-cooking reconciliation loop. `Pending inventory check
 - Outcome: Good; wanted more acidity.
 - Inventory update: 2 oz baby spinach remains; opened pasta removed.
 - Recipe update: Rated 4/5.
+- Feedback by person: Ed liked the texture but wanted more acidity; Sam liked the seasoning.
+- Shared themes: 2 of 2 liked the texture.
+- Differences: Ed wanted more acidity; Sam did not request a change.
+- Next-time changes: Offer lemon at the table for Ed.
+- Profile updates: Ed prefers brighter acidity, supported by repeated feedback.
 ```
 
 Use `None.` when a section has no entries. Do not clear a pending check until the user answers what remains.
 
+## `people.md`
+
+Treat this as the source of truth for individual flavor profiles. Use one `###` section per person and keep all fields, writing `unknown` when evidence is absent.
+
+```markdown
+# People Flavor Profiles
+
+Last updated: 2026-07-12T15:00:00Z
+
+## People
+
+### Ed
+
+- Relationship: primary cook
+- Likes: citrus, charred edges
+- Dislikes: overly sweet savory dishes
+- Salt preference: medium
+- Sweetness preference: low in savory food
+- Acidity preference: bright
+- Bitterness preference: unknown
+- Umami preference: high
+- Heat preference: medium-hot
+- Richness preference: medium
+- Aromatic preferences: garlic, scallion
+- Texture preferences: crisp vegetables
+- Doneness preferences: medium-rare steak
+- Preferred cuisines: Korean, Mexican, Italian
+- Dietary restrictions: none stated
+- Allergies: none stated
+- Evidence: 3 meal feedback entries
+- Last feedback: 2026-07-12
+```
+
+Keep meal-specific reactions in `cooking-log.md`. Update durable profile fields only from an explicit general statement or a pattern supported across meals. `Evidence` should say how many feedback entries currently support the synthesized profile.
+
 ## `profile.md`
 
-Treat this as the source of truth for normal meal size and durable preferences. Keep unknown values explicit until the user supplies them.
+Treat this as the source of truth for household-wide meal patterns and shared defaults. Keep person-specific flavor preferences in `people.md`, and keep unknown values explicit until the user supplies them.
 
 ```markdown
 # Kitchen Profile
