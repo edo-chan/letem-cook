@@ -21,9 +21,16 @@ SPEC.loader.exec_module(KITCHEN)
 
 class KitchenTest(unittest.TestCase):
     def test_bundled_example_uses_confirmed_inventory_without_guessing(self) -> None:
-        inventory, pantry, recipes, inspiration, cooking_log, profile, people = (
-            KITCHEN.load_and_validate(EXAMPLE)
-        )
+        (
+            inventory,
+            pantry,
+            recipes,
+            inspiration,
+            cooking_log,
+            profile,
+            consumption,
+            people,
+        ) = KITCHEN.load_and_validate(EXAMPLE)
         by_name = {item["name"]: item for item in inventory}
 
         self.assertEqual(len(inventory), 5)
@@ -35,11 +42,16 @@ class KitchenTest(unittest.TestCase):
         self.assertEqual(by_name["Dim sum"]["use_by"], "unknown")
         self.assertEqual(KITCHEN.ready_leftovers(inventory), [])
         self.assertEqual(len(KITCHEN.leftovers_needing_review(inventory)), 4)
-        self.assertEqual(len(pantry), 1)
-        self.assertEqual(pantry[0]["name"], "Miso")
-        self.assertEqual(pantry[0]["category"], "condiments")
+        self.assertEqual(len(pantry), 5)
+        pantry_by_name = {item["name"]: item for item in pantry}
+        self.assertEqual(pantry_by_name["Miso"]["category"], "condiments")
+        self.assertEqual(pantry_by_name["Rice noodles"]["category"], "noodles and pasta")
+        self.assertEqual(pantry_by_name["Tea"]["category"], "tea and coffee")
         self.assertIn("T-bone steak", cooking_log)
         self.assertEqual(profile["Usual meal size"], "unknown")
+        self.assertEqual(profile["Heat control"], "unknown")
+        self.assertEqual(len(consumption), 1)
+        self.assertEqual(consumption[0]["item"], "T-bone steak")
         self.assertEqual(people, {})
         self.assertEqual(recipes["recipes"], [])
         self.assertEqual(inspiration["ideas"], [])
@@ -54,9 +66,16 @@ class KitchenTest(unittest.TestCase):
             kitchen = Path(directory) / "kitchen"
             KITCHEN.initialize(kitchen, force=False)
 
-            inventory, pantry, recipes, inspiration, cooking_log, profile, people = (
-                KITCHEN.load_and_validate(kitchen)
-            )
+            (
+                inventory,
+                pantry,
+                recipes,
+                inspiration,
+                cooking_log,
+                profile,
+                consumption,
+                people,
+            ) = KITCHEN.load_and_validate(kitchen)
 
             self.assertEqual(inventory, [])
             self.assertEqual(pantry, [])
@@ -64,6 +83,8 @@ class KitchenTest(unittest.TestCase):
             self.assertEqual(inspiration["ideas"], [])
             self.assertIn("## Pending inventory check", cooking_log)
             self.assertEqual(profile["Usual meal size"], "unknown")
+            self.assertEqual(profile["Recipe independence"], "unknown")
+            self.assertEqual(consumption, [])
             self.assertEqual(people, {})
 
     def test_people_flavor_profile_parses_all_dimensions(self) -> None:
@@ -193,7 +214,7 @@ class KitchenTest(unittest.TestCase):
                 result.stdout.index("No saved recipes"),
             )
 
-    def test_match_uses_food_pantry_but_excludes_medicine(self) -> None:
+    def test_match_uses_food_pantry_but_excludes_medicine_and_pet_food(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             kitchen = Path(directory) / "kitchen"
             KITCHEN.initialize(kitchen, force=False)
@@ -208,6 +229,7 @@ class KitchenTest(unittest.TestCase):
                 f"{KITCHEN.INVENTORY_SEPARATOR}\n"
                 "| ramen | Instant ramen | 2 | packs | ramen | pantry | unknown | no | |\n"
                 "| medicine | Cold medicine | 1 | box | medicine | pantry | unknown | yes | |\n"
+                "| pet-food | Dry cat food | 1 | bag | pet dry food | pantry | unknown | yes | |\n"
             )
             recipes_path = kitchen / "recipes.json"
             recipes = json.loads(recipes_path.read_text())
@@ -232,6 +254,13 @@ class KitchenTest(unittest.TestCase):
                             "optional": False,
                             "substitutions": [],
                         },
+                        {
+                            "name": "dry cat food",
+                            "quantity": 1,
+                            "unit": "bag",
+                            "optional": False,
+                            "substitutions": [],
+                        },
                     ],
                     "steps": ["Test matching only."],
                     "notes": "",
@@ -249,8 +278,8 @@ class KitchenTest(unittest.TestCase):
                 text=True,
             )
 
-            self.assertIn("50% pantry coverage", result.stdout)
-            self.assertIn("Missing: cold medicine", result.stdout)
+            self.assertIn("33% pantry coverage", result.stdout)
+            self.assertIn("Missing: cold medicine, dry cat food", result.stdout)
 
     def test_status_reports_agentic_pantry_category_breakdown(self) -> None:
         result = subprocess.run(
@@ -260,9 +289,37 @@ class KitchenTest(unittest.TestCase):
             text=True,
         )
 
-        self.assertIn("Pantry items: 1", result.stdout)
+        self.assertIn("Pantry items: 5", result.stdout)
         self.assertIn("condiments=1", result.stdout)
+        self.assertIn("noodles and pasta=2", result.stdout)
+        self.assertIn("tea and coffee=2", result.stdout)
         self.assertIn("medicine=0", result.stdout)
+        self.assertIn("pet wet food=0", result.stdout)
+        self.assertIn("Consumption entries: 1", result.stdout)
+
+    def test_find_searches_inventory_and_pantry(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "find", "pasta", str(EXAMPLE)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertIn("Pasta — unknown amount in pantry", result.stdout)
+
+    def test_profile_rejects_cooking_level_outside_one_to_ten(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            kitchen = Path(directory) / "kitchen"
+            KITCHEN.initialize(kitchen, force=False)
+            profile_path = kitchen / "profile.md"
+            profile_path.write_text(
+                profile_path.read_text().replace(
+                    "- Heat control: unknown", "- Heat control: 11"
+                )
+            )
+
+            with self.assertRaisesRegex(KITCHEN.KitchenError, "integer from 1 to 10"):
+                KITCHEN.load_and_validate(kitchen)
 
     def test_leftover_without_use_by_date_is_not_presented_as_ready(self) -> None:
         inventory = [
@@ -318,7 +375,17 @@ class KitchenTest(unittest.TestCase):
         self.assertIn("Maintain the agentic pantry", skill)
         self.assertIn("`pantry.md` as the only source of truth", skill)
         self.assertIn("pancake or cake mixes", skill)
-        self.assertIn("Never treat medicine as a recipe ingredient", skill)
+        self.assertIn("Never treat medicine, pet food, or pet supplies", skill)
+        self.assertIn("Update consumption", skill)
+        self.assertIn("consumption-log.md", skill)
+        self.assertIn("Adapt instructions to cooking level", skill)
+        self.assertIn("six independent 1-10 dimensions", skill)
+        self.assertIn("Do I have X at home?", skill)
+        self.assertIn("Should I buy X?", skill)
+        self.assertIn("Can I cook Y?", skill)
+        self.assertIn("Generate a shopping list for me", skill)
+        self.assertIn("pet wet food", skill)
+        self.assertIn("tea and coffee", skill)
 
 
 if __name__ == "__main__":

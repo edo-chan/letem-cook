@@ -1,6 +1,6 @@
 ---
 name: letem-cook
-description: Run an agentic kitchen and agentic pantry with separate persistent Markdown memories for perishable ingredients and categorized pantry items, connected to leftovers, cooking history, usual meal size, per-person flavor profiles, recipe inventory, inspiration, substitutions, and variations. Use when a user wants to record groceries or pantry goods, categorize seasonings, ramen, condiments, medicine, snacks, pancake or cake mixes, or cereal, prioritize prepared leftovers, cook from ingredients on hand, reconcile food after cooking, capture meal feedback, reduce food waste, save or adapt recipes, plan meals, or initialize and maintain a Let Em Cook workspace.
+description: Run an agentic kitchen and pantry with persistent Markdown memory for perishable ingredients, categorized pantry and pet supplies, consumption, cooking level, leftovers, cooking history, meal size, per-person flavor profiles, recipes, inspiration, substitutions, and variations. Use when a user records groceries, pantry goods, tea, coffee, noodles, pasta, pet wet or dry food, eating, drinking, usage, or feeding; asks whether to buy an item, whether it is at home, whether a dish is cookable, what to eat, or for a profile-aware shopping list; needs recipe instructions adapted to six 1-10 cooking-skill dimensions; finishes cooking; gives meal feedback; reduces waste; saves or adapts recipes; or initializes a Let Em Cook workspace.
 ---
 
 # Let Em Cook
@@ -21,6 +21,7 @@ Resolve the kitchen workspace from `LETEM_COOK_HOME` when set; otherwise use `~/
 
 - `inventory.md` for the canonical current ingredient inventory
 - `pantry.md` for the canonical categorized pantry memory
+- `consumption-log.md` for confirmed eating, drinking, usage, and pet feeding
 - `cooking-log.md` for pending post-cook checks and recent outcomes
 - `people.md` for per-person flavor profiles and evidence counts
 - `profile.md` for usual meal size, diners, constraints, and preferences
@@ -29,7 +30,7 @@ Resolve the kitchen workspace from `LETEM_COOK_HOME` when set; otherwise use `~/
 
 Do not rely on chat context as a substitute for these files. If `cooking-log.md` contains a pending inventory check, resolve it before making inventory-dependent recommendations.
 
-Use [examples/ed-kitchen](examples/ed-kitchen) as a concrete example of a valid workspace built from a real inventory conversation. Notice that it keeps miso in the agentic pantry, preserves unknown locations and dates, records the confirmed dim sum location, and keeps the steak reconciliation pending rather than inventing facts.
+Use [examples/ed-kitchen](examples/ed-kitchen) as a concrete example of a valid workspace built from a real inventory conversation. Notice that it keeps miso, noodles, pasta, tea, and coffee in the agentic pantry, logs confirmed steak consumption, preserves unknown facts, and keeps the steak reconciliation pending rather than inventing storage or dates.
 
 If no workspace exists, initialize one with:
 
@@ -59,12 +60,23 @@ python3 <skill-directory>/scripts/kitchen.py validate
 
 - Treat `pantry.md` as the only source of truth for pantry items; do not duplicate the same package in `inventory.md`.
 - Put active perishables, prepared food, and leftovers in `inventory.md`. Put longer-lived pantry goods and household pantry supplies in `pantry.md`.
-- Categorize every pantry row as `seasonings`, `ramen`, `condiments`, `medicine`, `snacks`, `pancake or cake mixes`, `cereal`, or `other`.
+- Categorize every pantry row as `seasonings`, `ramen`, `noodles and pasta`, `condiments`, `tea and coffee`, `medicine`, `snacks`, `pancake or cake mixes`, `cereal`, `pet wet food`, `pet dry food`, `pet supplies`, or `other`.
 - Preserve quantity, location, best-by date, and opened state as `unknown` when the user did not supply them.
-- Keep medicines for household memory only. Never treat medicine as a recipe ingredient, food, snack, substitution, or meal recommendation.
+- Keep medicines and pet items for household memory only. Never treat medicine, pet food, or pet supplies as a human recipe ingredient, snack, substitution, shopping-list food, or meal recommendation.
 - After pantry goods are used, ask what remains when the amount materially changed, then update the quantity and opened state.
 - Surface low supplies, opened packages, and known best-by dates when relevant. Do not invent restock thresholds.
 - Use food pantry items together with `inventory.md` for recipe coverage and inspiration.
+
+## Update consumption
+
+- Treat `consumption-log.md` as the durable record of confirmed eating, drinking, pantry usage, and pet feeding.
+- When the user says they ate, drank, used, fed, finished, or discarded something, identify the exact `inventory.md` or `pantry.md` row and the amount. Ask a short follow-up only when the amount or batch is ambiguous.
+- Deduct only a confirmed amount. Never infer recipe usage, allow a quantity to fall below zero, or alter similarly named batches without evidence.
+- Mark a package opened when confirmed. Remove an exhausted row unless retaining quantity `0` is historically useful.
+- Append the date, item, amount, unit, consumer, source, and concise notes to `consumption-log.md`. Use `unknown` for an unidentified consumer, and distinguish `inventory`, `pantry`, `meal`, `outside`, or `unknown` sources.
+- For pet food, name the pet as consumer when supplied and update the matching wet- or dry-food row. Do not add pet consumption to a person's flavor profile.
+- Keep cooked-meal reconciliation in `cooking-log.md` too; consumption history does not replace leftover tracking.
+- Update all affected timestamps and validate after the change.
 
 Use the status command to surface inventory totals, pantry category counts, and near-term use-by dates:
 
@@ -97,6 +109,16 @@ If the user does not answer the leftover question, leave the pending check in th
 - Never infer an allergy or dietary restriction from a dislike, nor erase an existing restriction without explicit confirmation.
 - Do not let a household default overwrite a named person's profile.
 - Update the profile timestamp whenever persistent preferences change.
+
+## Adapt instructions to cooking level
+
+Read [references/cooking-levels.md](references/cooking-levels.md) before assessing cooking level or writing recipe instructions. Track six independent 1-10 dimensions in `profile.md`: knife and prep, heat control, timing and multitasking, seasoning and tasting, technique range, and recipe independence.
+
+- Prefer explicit self-ratings and repeated evidence; do not infer a durable score from one meal.
+- Match instruction detail to the relevant dimensions for the requested dish, using the lowest relevant score as the baseline.
+- Preserve exact quantities, safety-critical temperatures, allergen warnings, and decisive sensory cues at every level.
+- Ask once for desired guidance when all relevant dimensions are unknown. If an immediate answer is needed, use level 3 and state that the cooking profile is not calibrated.
+- Honor a request for more or less detail without silently changing stored levels.
 
 ## Capture people's flavor profiles
 
@@ -149,6 +171,22 @@ python3 <skill-directory>/scripts/kitchen.py match <kitchen-directory> --top 5 -
 The match command prints ready leftovers before recipe candidates. Treat name-based recipe matches as candidates, not proof that quantities are sufficient. Check quantities and units before presenting a recipe as fully cookable.
 
 For each recommendation, report why it fits now, what it uses, what is missing or uncertain, relevant constraints, whose flavor profile it serves, and one useful variation when it adds value. For groups, find overlap first and offer a split seasoning, sauce, garnish, or doneness strategy when preferences differ.
+
+## Answer inventory and shopping questions
+
+For **“Do I have X at home?”**, search both `inventory.md` and `pantry.md`, including reasonable name variants. Report the matching item, quantity, unit, location, opened state, relevant date, and uncertainty. Do not turn an unknown quantity into a confident yes. Use `kitchen.py find` as a deterministic starting point.
+
+For **“Should I buy X?”**, first answer whether X or a practical substitute is already present. Then consider confirmed quantity, usual meal size, planned recipe need, known consumption, opened state, date, preferences, restrictions, and duplicate packages. Answer `buy`, `skip`, or `check first`, with the deciding reason. Do not invent a restock threshold or purchase need from an unknown quantity.
+
+For **“Can I cook Y?”**, identify the intended saved recipe or state the assumed version. Check every required ingredient across active inventory and the human-food pantry, verify quantities and units where possible, exclude unsafe items and non-human categories, and separate `available`, `missing`, and `quantity unknown`. Report whether the answer is `yes`, `yes with substitutions`, or `not yet`, then adapt instructions to the cooking-level profile if the user wants to proceed.
+
+For **“Generate a shopping list for me”**, use the user's stated needs, requested horizon or meals, usual meal size, desired leftovers, dietary restrictions, allergies, flavor profiles, saved recipes, active inventory, pantry, dates, and confirmed consumption. Prioritize safe leftovers and items already at home before adding purchases. Deduplicate ingredients and group the output into:
+
+- **Buy:** confirmed gaps with quantities scaled to the plan.
+- **Check first:** items with unknown quantity, location, opened state, or freshness.
+- **Optional:** preference-driven extras and deliberate variations.
+
+Explain which meal or need each item serves. Keep pet items in a separate pet section only when requested or when a confirmed pet-supply need exists. Never mix medicine or pet supplies into the food list, and never recommend a purchase solely because consumption history contains a one-off event.
 
 ## Capture inspiration and variations
 
