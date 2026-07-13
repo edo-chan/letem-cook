@@ -21,7 +21,9 @@ SPEC.loader.exec_module(KITCHEN)
 
 class KitchenTest(unittest.TestCase):
     def test_bundled_example_uses_confirmed_inventory_without_guessing(self) -> None:
-        inventory, recipes, inspiration, cooking_log, profile = KITCHEN.load_and_validate(EXAMPLE)
+        inventory, recipes, inspiration, cooking_log, profile, people = KITCHEN.load_and_validate(
+            EXAMPLE
+        )
         by_name = {item["name"]: item for item in inventory}
 
         self.assertEqual(len(inventory), 5)
@@ -35,6 +37,7 @@ class KitchenTest(unittest.TestCase):
         self.assertEqual(len(KITCHEN.leftovers_needing_review(inventory)), 4)
         self.assertIn("T-bone steak", cooking_log)
         self.assertEqual(profile["Usual meal size"], "unknown")
+        self.assertEqual(people, {})
         self.assertEqual(recipes["recipes"], [])
         self.assertEqual(inspiration["ideas"], [])
 
@@ -48,8 +51,8 @@ class KitchenTest(unittest.TestCase):
             kitchen = Path(directory) / "kitchen"
             KITCHEN.initialize(kitchen, force=False)
 
-            inventory, recipes, inspiration, cooking_log, profile = KITCHEN.load_and_validate(
-                kitchen
+            inventory, recipes, inspiration, cooking_log, profile, people = (
+                KITCHEN.load_and_validate(kitchen)
             )
 
             self.assertEqual(inventory, [])
@@ -57,6 +60,41 @@ class KitchenTest(unittest.TestCase):
             self.assertEqual(inspiration["ideas"], [])
             self.assertIn("## Pending inventory check", cooking_log)
             self.assertEqual(profile["Usual meal size"], "unknown")
+            self.assertEqual(people, {})
+
+    def test_people_flavor_profile_parses_all_dimensions(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            kitchen = Path(directory) / "kitchen"
+            KITCHEN.initialize(kitchen, force=False)
+            (kitchen / "people.md").write_text(
+                "# People Flavor Profiles\n\n"
+                "Last updated: 2026-07-12T15:00:00Z\n\n"
+                "## People\n\n"
+                "### Alex\n\n"
+                "- Relationship: friend\n"
+                "- Likes: citrus\n"
+                "- Dislikes: overly sweet sauces\n"
+                "- Salt preference: medium\n"
+                "- Sweetness preference: low\n"
+                "- Acidity preference: bright\n"
+                "- Bitterness preference: unknown\n"
+                "- Umami preference: high\n"
+                "- Heat preference: hot\n"
+                "- Richness preference: medium\n"
+                "- Aromatic preferences: garlic\n"
+                "- Texture preferences: crisp\n"
+                "- Doneness preferences: medium-rare steak\n"
+                "- Preferred cuisines: Korean\n"
+                "- Dietary restrictions: none stated\n"
+                "- Allergies: none stated\n"
+                "- Evidence: 2 meal feedback entries\n"
+                "- Last feedback: 2026-07-12\n"
+            )
+
+            *_, people = KITCHEN.load_and_validate(kitchen)
+
+            self.assertEqual(people["Alex"]["Heat preference"], "hot")
+            self.assertEqual(people["Alex"]["Evidence"], "2 meal feedback entries")
 
     def test_init_refuses_to_overwrite(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -194,8 +232,13 @@ class KitchenTest(unittest.TestCase):
         self.assertIn("leave the pending check in the log", skill)
         self.assertIn("safe prepared leftovers", skill)
         self.assertIn("usual meal size", skill)
-        self.assertIn("whether they would make it again", skill)
+        self.assertIn("whether each would make it again", skill)
         self.assertIn("Treat `profile.md` as the source of truth", skill)
+        self.assertIn("Treat `people.md` as the source of truth", skill)
+        self.assertIn("Feedback by person", skill)
+        self.assertIn("Shared themes", skill)
+        self.assertIn("Differences", skill)
+        self.assertIn("Do not treat silence as approval", skill)
 
 
 if __name__ == "__main__":

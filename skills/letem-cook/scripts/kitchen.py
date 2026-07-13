@@ -13,7 +13,14 @@ from pathlib import Path
 from typing import Any
 
 
-FILES = ("inventory.md", "cooking-log.md", "profile.md", "recipes.json", "inspiration.json")
+FILES = (
+    "inventory.md",
+    "cooking-log.md",
+    "people.md",
+    "profile.md",
+    "recipes.json",
+    "inspiration.json",
+)
 INVENTORY_HEADER = (
     "| ID | Ingredient | Quantity | Unit | Category | Location | Use by | Opened | Notes |"
 )
@@ -161,6 +168,59 @@ def load_profile(path: Path) -> dict[str, str]:
     return values
 
 
+def load_people(path: Path) -> dict[str, dict[str, str]]:
+    try:
+        content = path.read_text(encoding="utf-8")
+    except FileNotFoundError as error:
+        raise KitchenError(f"missing {path}") from error
+    required_headings = ("# People Flavor Profiles", "## People")
+    for heading in required_headings:
+        if heading not in content:
+            raise KitchenError(f"{path} is missing '{heading}'")
+    fields = (
+        "Relationship",
+        "Likes",
+        "Dislikes",
+        "Salt preference",
+        "Sweetness preference",
+        "Acidity preference",
+        "Bitterness preference",
+        "Umami preference",
+        "Heat preference",
+        "Richness preference",
+        "Aromatic preferences",
+        "Texture preferences",
+        "Doneness preferences",
+        "Preferred cuisines",
+        "Dietary restrictions",
+        "Allergies",
+        "Evidence",
+        "Last feedback",
+    )
+    profiles: dict[str, dict[str, str]] = {}
+    sections = content.split("\n### ")[1:]
+    for section in sections:
+        lines = section.splitlines()
+        name = lines[0].strip()
+        if not name or name in profiles:
+            raise KitchenError(f"{path} has an empty or duplicate person name")
+        values: dict[str, str] = {}
+        for line in lines[1:]:
+            if not line.startswith("- ") or ":" not in line:
+                continue
+            field, value = line[2:].split(":", maxsplit=1)
+            values[field.strip()] = value.strip()
+        missing = [field for field in fields if not values.get(field)]
+        if missing:
+            raise KitchenError(f"{path} profile '{name}' is missing: {', '.join(missing)}")
+        profiles[name] = values
+    if profiles and "None." in content.split("## People", maxsplit=1)[1]:
+        raise KitchenError(f"{path} cannot contain profiles and 'None.'")
+    if not profiles and "None." not in content.split("## People", maxsplit=1)[1]:
+        raise KitchenError(f"{path} must contain a profile or 'None.'")
+    return profiles
+
+
 def validate_recipes(data: dict[str, Any]) -> None:
     require_fields(data, ("schema_version", "recipes"), "recipes")
     if data["schema_version"] != 1:
@@ -243,15 +303,23 @@ def validate_inspiration(data: dict[str, Any]) -> None:
 
 def load_and_validate(
     kitchen: Path,
-) -> tuple[list[dict[str, str]], dict[str, Any], dict[str, Any], str, dict[str, str]]:
+) -> tuple[
+    list[dict[str, str]],
+    dict[str, Any],
+    dict[str, Any],
+    str,
+    dict[str, str],
+    dict[str, dict[str, str]],
+]:
     inventory = load_inventory(kitchen / "inventory.md")
     cooking_log = validate_cooking_log(kitchen / "cooking-log.md")
     profile = load_profile(kitchen / "profile.md")
+    people = load_people(kitchen / "people.md")
     recipes = load_json(kitchen / "recipes.json")
     inspiration = load_json(kitchen / "inspiration.json")
     validate_recipes(recipes)
     validate_inspiration(inspiration)
-    return inventory, recipes, inspiration, cooking_log, profile
+    return inventory, recipes, inspiration, cooking_log, profile, people
 
 
 def initialize(kitchen: Path, force: bool) -> None:
@@ -319,7 +387,7 @@ def leftovers_needing_review(inventory: list[dict[str, str]]) -> list[dict[str, 
 
 
 def show_status(kitchen: Path, days: int) -> None:
-    inventory, recipes, inspiration, cooking_log, profile = load_and_validate(kitchen)
+    inventory, recipes, inspiration, cooking_log, profile, people = load_and_validate(kitchen)
     expiring = expiring_items(inventory, days)
     leftovers = ready_leftovers(inventory)
     pending = "None." not in cooking_log.split("## Cooked meals", maxsplit=1)[0]
@@ -327,6 +395,7 @@ def show_status(kitchen: Path, days: int) -> None:
     print(f"Recipes: {len(recipes['recipes'])}")
     print(f"Inspiration ideas: {len(inspiration['ideas'])}")
     print(f"Usual meal size: {profile['Usual meal size']}")
+    print(f"People profiles: {len(people)}")
     print(f"Ready leftover meals: {len(leftovers)}")
     print(f"Leftovers needing date review: {len(leftovers_needing_review(inventory))}")
     print(f"Pending inventory check: {'yes' if pending else 'no'}")
@@ -340,7 +409,7 @@ def normalize_name(value: str) -> str:
 
 
 def match_recipes(kitchen: Path, top: int, days: int) -> None:
-    inventory, recipes, _, _, _ = load_and_validate(kitchen)
+    inventory, recipes, _, _, _, _ = load_and_validate(kitchen)
     show_leftovers(inventory)
     if ready_leftovers(inventory):
         print()
