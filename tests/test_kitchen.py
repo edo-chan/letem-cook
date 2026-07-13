@@ -21,8 +21,8 @@ SPEC.loader.exec_module(KITCHEN)
 
 class KitchenTest(unittest.TestCase):
     def test_bundled_example_uses_confirmed_inventory_without_guessing(self) -> None:
-        inventory, recipes, inspiration, cooking_log, profile, people = KITCHEN.load_and_validate(
-            EXAMPLE
+        inventory, pantry, recipes, inspiration, cooking_log, profile, people = (
+            KITCHEN.load_and_validate(EXAMPLE)
         )
         by_name = {item["name"]: item for item in inventory}
 
@@ -35,6 +35,9 @@ class KitchenTest(unittest.TestCase):
         self.assertEqual(by_name["Dim sum"]["use_by"], "unknown")
         self.assertEqual(KITCHEN.ready_leftovers(inventory), [])
         self.assertEqual(len(KITCHEN.leftovers_needing_review(inventory)), 4)
+        self.assertEqual(len(pantry), 1)
+        self.assertEqual(pantry[0]["name"], "Miso")
+        self.assertEqual(pantry[0]["category"], "condiments")
         self.assertIn("T-bone steak", cooking_log)
         self.assertEqual(profile["Usual meal size"], "unknown")
         self.assertEqual(people, {})
@@ -51,11 +54,12 @@ class KitchenTest(unittest.TestCase):
             kitchen = Path(directory) / "kitchen"
             KITCHEN.initialize(kitchen, force=False)
 
-            inventory, recipes, inspiration, cooking_log, profile, people = (
+            inventory, pantry, recipes, inspiration, cooking_log, profile, people = (
                 KITCHEN.load_and_validate(kitchen)
             )
 
             self.assertEqual(inventory, [])
+            self.assertEqual(pantry, [])
             self.assertEqual(recipes["recipes"], [])
             self.assertEqual(inspiration["ideas"], [])
             self.assertIn("## Pending inventory check", cooking_log)
@@ -189,6 +193,77 @@ class KitchenTest(unittest.TestCase):
                 result.stdout.index("No saved recipes"),
             )
 
+    def test_match_uses_food_pantry_but_excludes_medicine(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            kitchen = Path(directory) / "kitchen"
+            KITCHEN.initialize(kitchen, force=False)
+            pantry_path = kitchen / "pantry.md"
+            pantry_path.write_text(
+                "# Agentic Pantry\n\n"
+                "Last updated: 2026-07-12T15:00:00Z\n\n"
+                "## Categories\n\n"
+                + "".join(f"- {category}\n" for category in KITCHEN.PANTRY_CATEGORIES)
+                + "\n## Items\n\n"
+                f"{KITCHEN.PANTRY_HEADER}\n"
+                f"{KITCHEN.INVENTORY_SEPARATOR}\n"
+                "| ramen | Instant ramen | 2 | packs | ramen | pantry | unknown | no | |\n"
+                "| medicine | Cold medicine | 1 | box | medicine | pantry | unknown | yes | |\n"
+            )
+            recipes_path = kitchen / "recipes.json"
+            recipes = json.loads(recipes_path.read_text())
+            recipes["recipes"] = [
+                {
+                    "id": "ramen-test",
+                    "name": "Ramen test",
+                    "servings": 1,
+                    "tags": [],
+                    "ingredients": [
+                        {
+                            "name": "instant ramen",
+                            "quantity": 1,
+                            "unit": "pack",
+                            "optional": False,
+                            "substitutions": [],
+                        },
+                        {
+                            "name": "cold medicine",
+                            "quantity": 1,
+                            "unit": "box",
+                            "optional": False,
+                            "substitutions": [],
+                        },
+                    ],
+                    "steps": ["Test matching only."],
+                    "notes": "",
+                    "source": None,
+                    "last_cooked": None,
+                    "rating": None,
+                }
+            ]
+            recipes_path.write_text(json.dumps(recipes))
+
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "match", str(kitchen)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertIn("50% pantry coverage", result.stdout)
+            self.assertIn("Missing: cold medicine", result.stdout)
+
+    def test_status_reports_agentic_pantry_category_breakdown(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "status", str(EXAMPLE)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertIn("Pantry items: 1", result.stdout)
+        self.assertIn("condiments=1", result.stdout)
+        self.assertIn("medicine=0", result.stdout)
+
     def test_leftover_without_use_by_date_is_not_presented_as_ready(self) -> None:
         inventory = [
             {
@@ -239,6 +314,11 @@ class KitchenTest(unittest.TestCase):
         self.assertIn("Shared themes", skill)
         self.assertIn("Differences", skill)
         self.assertIn("Do not treat silence as approval", skill)
+        self.assertIn("Act as an agentic kitchen", skill)
+        self.assertIn("Maintain the agentic pantry", skill)
+        self.assertIn("`pantry.md` as the only source of truth", skill)
+        self.assertIn("pancake or cake mixes", skill)
+        self.assertIn("Never treat medicine as a recipe ingredient", skill)
 
 
 if __name__ == "__main__":

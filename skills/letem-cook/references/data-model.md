@@ -1,6 +1,6 @@
 # Kitchen memory model
 
-Let Em Cook uses four Markdown memory files and two structured JSON stores. Dates use `YYYY-MM-DD`; timestamps use ISO 8601 UTC.
+Let Em Cook uses five Markdown memory files and two structured JSON stores. Dates use `YYYY-MM-DD`; timestamps use ISO 8601 UTC.
 
 ## `inventory.md`
 
@@ -18,6 +18,36 @@ Last updated: 2026-07-12T15:00:00Z
 ```
 
 Use `unknown` for an unknown quantity, use-by date, or opened state. Use `yes`, `no`, or `unknown` for `Opened`. Use separate rows for batches with different use-by dates. Use category `leftover` for prepared meal-ready food and prefer quantity unit `portions`. Do not put the pipe character in cell values.
+
+## `pantry.md`
+
+Treat this as the canonical agentic-pantry memory, separate from active perishables and leftovers in `inventory.md`.
+
+```markdown
+# Agentic Pantry
+
+Last updated: 2026-07-12T15:00:00Z
+
+## Categories
+
+- seasonings
+- ramen
+- condiments
+- medicine
+- snacks
+- pancake or cake mixes
+- cereal
+- other
+
+## Items
+
+| ID | Item | Quantity | Unit | Category | Location | Best by | Opened | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| white-miso-2026-07-12 | White miso | 1 | tub | condiments | fridge | unknown | yes |  |
+| instant-ramen-2026-07-12 | Instant ramen | 5 | packs | ramen | pantry | 2027-01-10 | no |  |
+```
+
+Use exactly one of the listed category values for every row. Use `unknown` for facts the user did not supply. `Best by` accepts `unknown` or `YYYY-MM-DD`. Medicines may be tracked here for household memory, but must be excluded from recipes, food matching, substitutions, inspiration, snacks, and meals.
 
 ## `cooking-log.md`
 

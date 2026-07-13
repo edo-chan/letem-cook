@@ -1,4 +1,4 @@
 interface:
   display_name: "Let Em Cook"
-  short_description: "Remember each person’s flavor profile and feedback"
-  default_prompt: "Use $letem-cook to plan from my inventory and everyone’s flavor profiles."
+  short_description: "Run an agentic kitchen and categorized pantry"
+  default_prompt: "Use $letem-cook to manage my agentic kitchen and pantry, then suggest what to eat next."
