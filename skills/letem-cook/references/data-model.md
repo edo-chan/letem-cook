@@ -1,31 +1,44 @@
-# Kitchen data model
+# Kitchen memory model
 
-Let Em Cook uses three JSON files. Keep `schema_version` at `1` until a migration is intentionally designed. Dates use `YYYY-MM-DD`; timestamps use ISO 8601 UTC.
+Let Em Cook uses two Markdown memory files and two structured JSON stores. Dates use `YYYY-MM-DD`; timestamps use ISO 8601 UTC.
 
-## `inventory.json`
+## `inventory.md`
 
-```json
-{
-  "schema_version": 1,
-  "updated_at": null,
-  "items": [
-    {
-      "id": "baby-spinach-2026-07-12",
-      "name": "baby spinach",
-      "quantity": 5,
-      "unit": "oz",
-      "category": "produce",
-      "location": "fridge",
-      "expires_on": "2026-07-15",
-      "opened": true,
-      "notes": "",
-      "updated_at": "2026-07-12T15:00:00Z"
-    }
-  ]
-}
+Treat this as the canonical current ingredient memory. Keep the heading, `Last updated` line, table header, and column order intact so the CLI can validate and summarize it.
+
+```markdown
+# Ingredient Inventory
+
+Last updated: 2026-07-12T15:00:00Z
+
+| ID | Ingredient | Quantity | Unit | Category | Location | Use by | Opened | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| baby-spinach-2026-07-12 | baby spinach | 5 | oz | produce | fridge | 2026-07-15 | yes |  |
 ```
 
-`quantity` may be a number or `null`. `expires_on` may be a date or `null`. Use separate item records for batches with different expiration dates.
+Use `unknown` for an unknown quantity, use-by date, or opened state. Use `yes`, `no`, or `unknown` for `Opened`. Use separate rows for batches with different use-by dates. Do not put the pipe character in cell values.
+
+## `cooking-log.md`
+
+Use this file for the post-cooking reconciliation loop. `Pending inventory check` contains meals that still require a leftover check. `Cooked meals` preserves dated outcomes and the inventory changes confirmed by the user.
+
+```markdown
+# Cooking Log
+
+## Pending inventory check
+
+- 2026-07-12 — Spinach white bean pasta
+
+## Cooked meals
+
+### 2026-07-12 — Spinach white bean pasta
+
+- Outcome: Good; wanted more acidity.
+- Inventory update: 2 oz baby spinach remains; opened pasta removed.
+- Recipe update: Rated 4/5.
+```
+
+Use `None.` when a section has no entries. Do not clear a pending check until the user answers what remains.
 
 ## `recipes.json`
 
@@ -80,4 +93,4 @@ Let Em Cook uses three JSON files. Keep `schema_version` at `1` until a migratio
 }
 ```
 
-Use `idea`, `testing`, or `promoted` for `status`. A promoted idea should point to the resulting recipe in `notes` until the schema gains an explicit relationship.
+Use `idea`, `testing`, or `promoted` for `status`.

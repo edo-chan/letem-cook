@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
 from datetime import date, timedelta
@@ -12,11 +13,19 @@ from pathlib import Path
 from typing import Any
 
 
-FILES = ("inventory.json", "recipes.json", "inspiration.json")
+FILES = ("inventory.md", "cooking-log.md", "recipes.json", "inspiration.json")
+INVENTORY_HEADER = (
+    "| ID | Ingredient | Quantity | Unit | Category | Location | Use by | Opened | Notes |"
+)
+INVENTORY_SEPARATOR = "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"
 
 
 class KitchenError(ValueError):
     """Raised when kitchen data is missing or invalid."""
+
+
+def default_kitchen() -> Path:
+    return Path(os.environ.get("LETEM_COOK_HOME", "~/.letem-cook")).expanduser()
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -53,11 +62,23 @@ def parse_date(value: Any, context: str) -> date | None:
         raise KitchenError(f"{context} must use YYYY-MM-DD") from error
 
 
-def validate_inventory(data: dict[str, Any]) -> None:
-    require_fields(data, ("schema_version", "updated_at", "items"), "inventory")
-    if data["schema_version"] != 1:
-        raise KitchenError("inventory schema_version must be 1")
-    require_type(data["items"], list, "inventory.items")
+def load_inventory(path: Path) -> list[dict[str, str]]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError as error:
+        raise KitchenError(f"missing {path}") from error
+    if not lines or lines[0] != "# Ingredient Inventory":
+        raise KitchenError(f"{path} must start with '# Ingredient Inventory'")
+    if not any(line.startswith("Last updated: ") for line in lines):
+        raise KitchenError(f"{path} is missing the Last updated line")
+    try:
+        header_index = lines.index(INVENTORY_HEADER)
+    except ValueError as error:
+        raise KitchenError(f"{path} is missing the inventory table header") from error
+    if header_index + 1 >= len(lines) or lines[header_index + 1] != INVENTORY_SEPARATOR:
+        raise KitchenError(f"{path} has an invalid inventory table separator")
+
+    items: list[dict[str, str]] = []
     ids: set[str] = set()
     fields = (
         "id",
@@ -66,26 +87,43 @@ def validate_inventory(data: dict[str, Any]) -> None:
         "unit",
         "category",
         "location",
-        "expires_on",
+        "use_by",
         "opened",
         "notes",
-        "updated_at",
     )
-    for index, item in enumerate(data["items"]):
-        context = f"inventory.items[{index}]"
-        require_type(item, dict, context)
-        require_fields(item, fields, context)
-        for field in ("id", "name", "unit", "category", "location", "notes", "updated_at"):
-            require_type(item[field], str, f"{context}.{field}")
+    for line_number, line in enumerate(lines[header_index + 2 :], start=header_index + 3):
+        if not line.startswith("|"):
+            break
+        values = [value.strip() for value in line.strip().strip("|").split("|")]
+        if len(values) != len(fields):
+            raise KitchenError(f"inventory.md line {line_number} must have {len(fields)} columns")
+        item = dict(zip(fields, values, strict=True))
+        context = f"inventory.md line {line_number}"
         if not item["id"] or item["id"] in ids:
             raise KitchenError(f"{context}.id must be non-empty and unique")
+        if not item["name"]:
+            raise KitchenError(f"{context}.name must be non-empty")
         ids.add(item["id"])
-        if item["quantity"] is not None:
-            require_type(item["quantity"], (int, float), f"{context}.quantity")
-            if item["quantity"] < 0:
-                raise KitchenError(f"{context}.quantity cannot be negative")
-        require_type(item["opened"], bool, f"{context}.opened")
-        parse_date(item["expires_on"], f"{context}.expires_on")
+        if not item["quantity"]:
+            raise KitchenError(f"{context}.quantity must be a value or 'unknown'")
+        if item["opened"].casefold() not in {"yes", "no", "unknown"}:
+            raise KitchenError(f"{context}.opened must be yes, no, or unknown")
+        if item["use_by"].casefold() != "unknown":
+            parse_date(item["use_by"], f"{context}.use_by")
+        items.append(item)
+    return items
+
+
+def validate_cooking_log(path: Path) -> str:
+    try:
+        content = path.read_text(encoding="utf-8")
+    except FileNotFoundError as error:
+        raise KitchenError(f"missing {path}") from error
+    required = ("# Cooking Log", "## Pending inventory check", "## Cooked meals")
+    for heading in required:
+        if heading not in content:
+            raise KitchenError(f"{path} is missing '{heading}'")
+    return content
 
 
 def validate_recipes(data: dict[str, Any]) -> None:
@@ -168,14 +206,16 @@ def validate_inspiration(data: dict[str, Any]) -> None:
             require_type(idea[field], list, f"{context}.{field}")
 
 
-def load_and_validate(kitchen: Path) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    inventory = load_json(kitchen / "inventory.json")
+def load_and_validate(
+    kitchen: Path,
+) -> tuple[list[dict[str, str]], dict[str, Any], dict[str, Any], str]:
+    inventory = load_inventory(kitchen / "inventory.md")
+    cooking_log = validate_cooking_log(kitchen / "cooking-log.md")
     recipes = load_json(kitchen / "recipes.json")
     inspiration = load_json(kitchen / "inspiration.json")
-    validate_inventory(inventory)
     validate_recipes(recipes)
     validate_inspiration(inspiration)
-    return inventory, recipes, inspiration
+    return inventory, recipes, inspiration, cooking_log
 
 
 def initialize(kitchen: Path, force: bool) -> None:
@@ -189,25 +229,33 @@ def initialize(kitchen: Path, force: bool) -> None:
     print(f"Initialized kitchen at {kitchen}")
 
 
-def expiring_items(inventory: dict[str, Any], days: int) -> list[dict[str, Any]]:
+def expiring_items(inventory: list[dict[str, str]], days: int) -> list[dict[str, str]]:
     cutoff = date.today() + timedelta(days=days)
     matches = []
-    for item in inventory["items"]:
-        expires_on = parse_date(item["expires_on"], f"inventory item {item['id']}.expires_on")
-        if expires_on is not None and expires_on <= cutoff and item["quantity"] != 0:
+    for item in inventory:
+        if item["use_by"].casefold() == "unknown":
+            continue
+        expires_on = parse_date(item["use_by"], f"inventory item {item['id']}.use_by")
+        if expires_on is not None and expires_on <= cutoff and quantity_is_available(item["quantity"]):
             matches.append(item)
-    return sorted(matches, key=lambda item: item["expires_on"])
+    return sorted(matches, key=lambda item: item["use_by"])
+
+
+def quantity_is_available(quantity: str) -> bool:
+    return quantity.casefold().strip() not in {"0", "0.0", "none", "empty"}
 
 
 def show_status(kitchen: Path, days: int) -> None:
-    inventory, recipes, inspiration = load_and_validate(kitchen)
+    inventory, recipes, inspiration, cooking_log = load_and_validate(kitchen)
     expiring = expiring_items(inventory, days)
-    print(f"Ingredients: {len(inventory['items'])}")
+    pending = "None." not in cooking_log.split("## Cooked meals", maxsplit=1)[0]
+    print(f"Ingredients: {len(inventory)}")
     print(f"Recipes: {len(recipes['recipes'])}")
     print(f"Inspiration ideas: {len(inspiration['ideas'])}")
+    print(f"Pending inventory check: {'yes' if pending else 'no'}")
     print(f"Expiring within {days} days: {len(expiring)}")
     for item in expiring:
-        print(f"- {item['name']} ({item['expires_on']}, {item['location']})")
+        print(f"- {item['name']} ({item['use_by']}, {item['location']})")
 
 
 def normalize_name(value: str) -> str:
@@ -215,11 +263,11 @@ def normalize_name(value: str) -> str:
 
 
 def match_recipes(kitchen: Path, top: int, days: int) -> None:
-    inventory, recipes, _ = load_and_validate(kitchen)
+    inventory, recipes, _, _ = load_and_validate(kitchen)
     available = {
         normalize_name(item["name"]): item
-        for item in inventory["items"]
-        if item["quantity"] is None or item["quantity"] > 0
+        for item in inventory
+        if quantity_is_available(item["quantity"])
     }
     expiring = {normalize_name(item["name"]) for item in expiring_items(inventory, days)}
     ranked = []
@@ -249,18 +297,18 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     init_parser = subparsers.add_parser("init", help="create an empty kitchen workspace")
-    init_parser.add_argument("kitchen", type=Path)
+    init_parser.add_argument("kitchen", nargs="?", type=Path, default=default_kitchen())
     init_parser.add_argument("--force", action="store_true")
 
     validate_parser = subparsers.add_parser("validate", help="validate all kitchen files")
-    validate_parser.add_argument("kitchen", type=Path)
+    validate_parser.add_argument("kitchen", nargs="?", type=Path, default=default_kitchen())
 
     status_parser = subparsers.add_parser("status", help="summarize kitchen data")
-    status_parser.add_argument("kitchen", type=Path)
+    status_parser.add_argument("kitchen", nargs="?", type=Path, default=default_kitchen())
     status_parser.add_argument("--days", type=int, default=7)
 
     match_parser = subparsers.add_parser("match", help="rank recipes by ingredient-name coverage")
-    match_parser.add_argument("kitchen", type=Path)
+    match_parser.add_argument("kitchen", nargs="?", type=Path, default=default_kitchen())
     match_parser.add_argument("--top", type=int, default=5)
     match_parser.add_argument("--days", type=int, default=7)
     return parser
