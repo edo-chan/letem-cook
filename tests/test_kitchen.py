@@ -307,6 +307,16 @@ class KitchenTest(unittest.TestCase):
 
         self.assertIn("Pasta — unknown amount in pantry", result.stdout)
 
+        tea_result = subprocess.run(
+            [sys.executable, str(SCRIPT), "find", "tea", str(EXAMPLE)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertIn("Tea — unknown amount in pantry", tea_result.stdout)
+        self.assertNotIn("T-bone steak", tea_result.stdout)
+
     def test_profile_rejects_cooking_level_outside_one_to_ten(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             kitchen = Path(directory) / "kitchen"
