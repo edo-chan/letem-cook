@@ -15,6 +15,7 @@ from typing import Any
 
 FILES = (
     "inventory.md",
+    "pantry.md",
     "cooking-log.md",
     "people.md",
     "profile.md",
@@ -25,6 +26,17 @@ INVENTORY_HEADER = (
     "| ID | Ingredient | Quantity | Unit | Category | Location | Use by | Opened | Notes |"
 )
 INVENTORY_SEPARATOR = "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"
+PANTRY_HEADER = "| ID | Item | Quantity | Unit | Category | Location | Best by | Opened | Notes |"
+PANTRY_CATEGORIES = (
+    "seasonings",
+    "ramen",
+    "condiments",
+    "medicine",
+    "snacks",
+    "pancake or cake mixes",
+    "cereal",
+    "other",
+)
 
 
 class KitchenError(ValueError):
@@ -117,6 +129,65 @@ def load_inventory(path: Path) -> list[dict[str, str]]:
             raise KitchenError(f"{context}.opened must be yes, no, or unknown")
         if item["use_by"].casefold() != "unknown":
             parse_date(item["use_by"], f"{context}.use_by")
+        items.append(item)
+    return items
+
+
+def load_pantry(path: Path) -> list[dict[str, str]]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError as error:
+        raise KitchenError(f"missing {path}") from error
+    if not lines or lines[0] != "# Agentic Pantry":
+        raise KitchenError(f"{path} must start with '# Agentic Pantry'")
+    if not any(line.startswith("Last updated: ") for line in lines):
+        raise KitchenError(f"{path} is missing the Last updated line")
+    for category in PANTRY_CATEGORIES:
+        if f"- {category}" not in lines:
+            raise KitchenError(f"{path} is missing pantry category '{category}'")
+    try:
+        header_index = lines.index(PANTRY_HEADER)
+    except ValueError as error:
+        raise KitchenError(f"{path} is missing the pantry table header") from error
+    if header_index + 1 >= len(lines) or lines[header_index + 1] != INVENTORY_SEPARATOR:
+        raise KitchenError(f"{path} has an invalid pantry table separator")
+
+    items: list[dict[str, str]] = []
+    ids: set[str] = set()
+    fields = (
+        "id",
+        "name",
+        "quantity",
+        "unit",
+        "category",
+        "location",
+        "use_by",
+        "opened",
+        "notes",
+    )
+    for line_number, line in enumerate(lines[header_index + 2 :], start=header_index + 3):
+        if not line.startswith("|"):
+            break
+        values = [value.strip() for value in line.strip().strip("|").split("|")]
+        if len(values) != len(fields):
+            raise KitchenError(f"pantry.md line {line_number} must have {len(fields)} columns")
+        item = dict(zip(fields, values, strict=True))
+        context = f"pantry.md line {line_number}"
+        if not item["id"] or item["id"] in ids:
+            raise KitchenError(f"{context}.id must be non-empty and unique")
+        if not item["name"]:
+            raise KitchenError(f"{context}.name must be non-empty")
+        ids.add(item["id"])
+        if not item["quantity"]:
+            raise KitchenError(f"{context}.quantity must be a value or 'unknown'")
+        if item["category"].casefold() not in PANTRY_CATEGORIES:
+            raise KitchenError(
+                f"{context}.category must be one of: {', '.join(PANTRY_CATEGORIES)}"
+            )
+        if item["opened"].casefold() not in {"yes", "no", "unknown"}:
+            raise KitchenError(f"{context}.opened must be yes, no, or unknown")
+        if item["use_by"].casefold() != "unknown":
+            parse_date(item["use_by"], f"{context}.best_by")
         items.append(item)
     return items
 
@@ -305,6 +376,7 @@ def load_and_validate(
     kitchen: Path,
 ) -> tuple[
     list[dict[str, str]],
+    list[dict[str, str]],
     dict[str, Any],
     dict[str, Any],
     str,
@@ -312,6 +384,7 @@ def load_and_validate(
     dict[str, dict[str, str]],
 ]:
     inventory = load_inventory(kitchen / "inventory.md")
+    pantry = load_pantry(kitchen / "pantry.md")
     cooking_log = validate_cooking_log(kitchen / "cooking-log.md")
     profile = load_profile(kitchen / "profile.md")
     people = load_people(kitchen / "people.md")
@@ -319,7 +392,7 @@ def load_and_validate(
     inspiration = load_json(kitchen / "inspiration.json")
     validate_recipes(recipes)
     validate_inspiration(inspiration)
-    return inventory, recipes, inspiration, cooking_log, profile, people
+    return inventory, pantry, recipes, inspiration, cooking_log, profile, people
 
 
 def initialize(kitchen: Path, force: bool) -> None:
@@ -387,11 +460,22 @@ def leftovers_needing_review(inventory: list[dict[str, str]]) -> list[dict[str, 
 
 
 def show_status(kitchen: Path, days: int) -> None:
-    inventory, recipes, inspiration, cooking_log, profile, people = load_and_validate(kitchen)
+    inventory, pantry, recipes, inspiration, cooking_log, profile, people = load_and_validate(
+        kitchen
+    )
     expiring = expiring_items(inventory, days)
     leftovers = ready_leftovers(inventory)
     pending = "None." not in cooking_log.split("## Cooked meals", maxsplit=1)[0]
     print(f"Ingredients: {len(inventory)}")
+    print(f"Pantry items: {len(pantry)}")
+    category_counts = {
+        category: sum(item["category"].casefold() == category for item in pantry)
+        for category in PANTRY_CATEGORIES
+    }
+    print(
+        "Pantry categories: "
+        + ", ".join(f"{category}={count}" for category, count in category_counts.items())
+    )
     print(f"Recipes: {len(recipes['recipes'])}")
     print(f"Inspiration ideas: {len(inspiration['ideas'])}")
     print(f"Usual meal size: {profile['Usual meal size']}")
@@ -409,13 +493,14 @@ def normalize_name(value: str) -> str:
 
 
 def match_recipes(kitchen: Path, top: int, days: int) -> None:
-    inventory, recipes, _, _, _, _ = load_and_validate(kitchen)
+    inventory, pantry, recipes, _, _, _, _ = load_and_validate(kitchen)
     show_leftovers(inventory)
     if ready_leftovers(inventory):
         print()
+    food_pantry = [item for item in pantry if item["category"].casefold() != "medicine"]
     available = {
         normalize_name(item["name"]): item
-        for item in inventory
+        for item in [*inventory, *food_pantry]
         if quantity_is_available(item["quantity"])
     }
     expiring = {normalize_name(item["name"]) for item in expiring_items(inventory, days)}

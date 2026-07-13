@@ -1,15 +1,16 @@
 # Let Em Cook
 
-Let Em Cook is a home-chef agent skill that turns persistent kitchen memory into useful meal ideas. It keeps six concerns connected:
+Let Em Cook is an agentic-kitchen skill that turns persistent kitchen and pantry memory into useful meal decisions. It keeps seven concerns connected:
 
 - ingredient inventory, quantities, locations, and expiration dates
+- a separate agentic pantry organized into seasonings, ramen, condiments, medicine, snacks, pancake or cake mixes, cereal, and other goods
 - prepared leftovers that should become the next meal
 - a personal recipe inventory
 - recipe inspiration based on what is available or needs to be used
 - usual meal size, food preferences, variations, and substitutions
 - individual flavor profiles and summarized feedback from shared meals
 
-The system is intentionally local-first. Ingredient inventory and cooking history live in readable Markdown memory files. Recipes and inspiration use JSON where structure helps matching, and the included Python CLI has no third-party dependencies.
+The system is intentionally local-first. Ingredient inventory, categorized pantry contents, and cooking history live in readable Markdown memory files. Recipes and inspiration use JSON where structure helps matching, and the included Python CLI has no third-party dependencies.
 
 ## Install the skill
 
@@ -23,6 +24,7 @@ Then invoke it with prompts such as:
 
 ```text
 Use $letem-cook to set up my kitchen inventory.
+Use $letem-cook to organize my seasonings, ramen, snacks, and cereal in the agentic pantry.
 Use $letem-cook to tell me what I can cook tonight in 30 minutes.
 Use $letem-cook to save this recipe and suggest two vegetarian variations.
 Use $letem-cook to prioritize ingredients that expire this week.
@@ -44,6 +46,7 @@ By default this creates private, persistent memory at `~/.letem-cook`. Set `LETE
 ```text
 ~/.letem-cook/
 ├── inventory.md
+├── pantry.md
 ├── cooking-log.md
 ├── people.md
 ├── profile.md
@@ -51,13 +54,13 @@ By default this creates private, persistent memory at `~/.letem-cook`. Set `LETE
 └── inspiration.json
 ```
 
-`inventory.md` is the canonical ingredient and leftover memory. `profile.md` remembers household meal patterns, while `people.md` keeps each person's flavor profile. After every cooking session, the agent asks what ingredients and portions remain, gathers attributed feedback, summarizes agreement and differences, and records the outcome in `cooking-log.md`. Safe leftovers are offered as the next meal before cooking something new. Keep this directory private; personal kitchen memory is intentionally not stored in the public repository.
+`inventory.md` is the canonical active ingredient and leftover memory. `pantry.md` separately tracks longer-lived pantry goods by category; medicine stays visible to household memory but is excluded from food matching. `profile.md` remembers household meal patterns, while `people.md` keeps each person's flavor profile. After every cooking session, the agent asks what ingredients, pantry goods, and portions remain, gathers attributed feedback, summarizes agreement and differences, and records the outcome in `cooking-log.md`. Safe leftovers are offered as the next meal before cooking something new. Keep this directory private; personal kitchen memory is intentionally not stored in the public repository.
 
 See [the data model](skills/letem-cook/references/data-model.md) for the record formats.
 
 ## Example kitchen
 
-The bundled [example kitchen](skills/letem-cook/examples/ed-kitchen) uses Ed's real starter inventory: half a T-bone steak, four croissants, two pieces of Alpaca chicken, a bento box of cooked rice, and a snack-size savory-and-sweet dim sum set. Unknown storage and dates remain unknown on purpose.
+The bundled [example kitchen](skills/letem-cook/examples/ed-kitchen) uses Ed's real starter inventory: half a T-bone steak, four croissants, two pieces of Alpaca chicken, a bento box of cooked rice, and a snack-size savory-and-sweet dim sum set. Its separate pantry example contains Ed's box of miso. Unknown storage and dates remain unknown on purpose.
 
 ```bash
 python3 skills/letem-cook/scripts/kitchen.py validate skills/letem-cook/examples/ed-kitchen
