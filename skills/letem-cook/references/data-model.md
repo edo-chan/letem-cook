@@ -1,6 +1,6 @@
 # Kitchen memory model
 
-Let Em Cook uses two Markdown memory files and two structured JSON stores. Dates use `YYYY-MM-DD`; timestamps use ISO 8601 UTC.
+Let Em Cook uses three Markdown memory files and two structured JSON stores. Dates use `YYYY-MM-DD`; timestamps use ISO 8601 UTC.
 
 ## `inventory.md`
 
@@ -14,9 +14,10 @@ Last updated: 2026-07-12T15:00:00Z
 | ID | Ingredient | Quantity | Unit | Category | Location | Use by | Opened | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | baby-spinach-2026-07-12 | baby spinach | 5 | oz | produce | fridge | 2026-07-15 | yes |  |
+| chili-leftover-2026-07-12 | bean chili | 2 | portions | leftover | fridge | 2026-07-15 | yes | Cooked 2026-07-12. |
 ```
 
-Use `unknown` for an unknown quantity, use-by date, or opened state. Use `yes`, `no`, or `unknown` for `Opened`. Use separate rows for batches with different use-by dates. Do not put the pipe character in cell values.
+Use `unknown` for an unknown quantity, use-by date, or opened state. Use `yes`, `no`, or `unknown` for `Opened`. Use separate rows for batches with different use-by dates. Use category `leftover` for prepared meal-ready food and prefer quantity unit `portions`. Do not put the pipe character in cell values.
 
 ## `cooking-log.md`
 
@@ -39,6 +40,36 @@ Use this file for the post-cooking reconciliation loop. `Pending inventory check
 ```
 
 Use `None.` when a section has no entries. Do not clear a pending check until the user answers what remains.
+
+## `profile.md`
+
+Treat this as the source of truth for normal meal size and durable preferences. Keep unknown values explicit until the user supplies them.
+
+```markdown
+# Kitchen Profile
+
+Last updated: 2026-07-12T15:00:00Z
+
+## Meal pattern
+
+- Usual meal size: 2 servings
+- Usual diners: 2 adults
+- Desired leftover portions: 1
+
+## Preferences
+
+- Likes: spicy food, citrus, crunchy textures
+- Dislikes: overly sweet savory dishes
+- Dietary restrictions: none stated
+- Allergies: none stated
+- Preferred cuisines: Korean, Mexican, Italian
+- Spice level: hot
+- Texture preferences: crisp vegetables
+- Effort preference: 30-minute weeknight meals
+- Leftover preference: eat leftovers before cooking a new meal
+```
+
+Record `unknown` rather than `none` when the user has not answered. Use `none stated` only after the user confirms no restriction or allergy. Keep one comma-separated line per field so the profile remains easy to scan and update.
 
 ## `recipes.json`
 

@@ -1,6 +1,6 @@
 ---
 name: letem-cook
-description: Manage a persistent local home-kitchen memory that connects Markdown ingredient inventory and cooking history with a personal recipe library, recipe inspiration, substitutions, and variations. Use when a user wants to record groceries or pantry changes, cook from ingredients on hand, finish a cooking session and reconcile leftovers, reduce food waste, save or adapt recipes, plan meals, brainstorm dishes, or initialize and maintain a Let Em Cook workspace.
+description: Manage a persistent local home-kitchen memory that connects Markdown ingredient and leftover inventory, cooking history, usual meal size, and food preferences with a personal recipe library, inspiration, substitutions, and variations. Use when a user wants to record groceries or pantry changes, prioritize prepared leftovers as a meal, cook from ingredients on hand, finish a cooking session and reconcile leftovers, remember household meal patterns or preferences, reduce food waste, save or adapt recipes, plan meals, brainstorm dishes, or initialize and maintain a Let Em Cook workspace.
 ---
 
 # Let Em Cook
@@ -13,6 +13,7 @@ Resolve the kitchen workspace from `LETEM_COOK_HOME` when set; otherwise use `~/
 
 - `inventory.md` for the canonical current ingredient inventory
 - `cooking-log.md` for pending post-cook checks and recent outcomes
+- `profile.md` for usual meal size, diners, constraints, and preferences
 - `recipes.json` when saved recipes matter
 - `inspiration.json` when ideas or variations matter
 
@@ -39,7 +40,7 @@ python3 <skill-directory>/scripts/kitchen.py validate
 - Update the `Last updated` timestamp whenever the inventory changes.
 - Reduce or remove quantities only after the user reports consumption, disposal, or correction.
 - Keep an exhausted item at quantity `0` only when its history is useful; otherwise remove its row.
-- Add cooked leftovers as new inventory items with their storage location and date when known.
+- Add cooked leftovers as new inventory rows with category `leftover`, quantity measured in portions when possible, storage location, use-by date, and the source meal in notes.
 - Flag expired food and uncertain food safety; do not recommend questionable ingredients merely to avoid waste.
 
 Use the status command to surface inventory totals and near-term use-by dates:
@@ -53,15 +54,25 @@ python3 <skill-directory>/scripts/kitchen.py status <kitchen-directory> --days 7
 Treat post-cook reconciliation as mandatory, not optional.
 
 1. When cooking begins, add the meal under `Pending inventory check` in `cooking-log.md`.
-2. After the final cooking step, or as soon as the user says they finished cooking, ask: **“Are there any ingredients left? If so, what is left and about how much?”**
-3. Also ask how the dish turned out when the user has not already said.
+2. After the final cooking step, or as soon as the user says they finished cooking, ask: **“Are there any ingredients left? If so, what is left and about how much? How many portions of the cooked meal are left?”**
+3. Ask where prepared leftovers were stored and their use-by date when those facts are unknown. Also ask how the dish turned out and whether they would make it again when the user has not already said.
 4. Wait for the answer before changing consumed quantities. Do not deduct the recipe's planned amounts automatically.
-5. Update every affected row in `inventory.md`, including partial amounts, newly opened state, discarded food, and prepared leftovers.
+5. Update every affected row in `inventory.md`, including partial amounts, newly opened state, discarded food, and prepared leftovers. Record each prepared leftover as a meal-ready inventory row instead of only mentioning it in the cooking log.
 6. Update `Last updated`, append the result under `Cooked meals`, and remove the matching pending check.
 7. Update the saved recipe's `last_cooked`, rating, or notes only when the user supplied those facts.
 8. Run validation and briefly confirm the memory changes.
 
 If the user does not answer the leftover question, leave the pending check in the log and do not invent an inventory update. At the start of the next kitchen interaction, ask to resolve that pending check before claiming the inventory is current.
+
+## Maintain meal size and preferences
+
+- Treat `profile.md` as the source of truth for the user's usual meal size and durable preferences.
+- If usual meal size is unknown, ask once before scaling a recipe or planning portions. Store the answer as servings and note the usual number of diners when supplied.
+- Scale recipe recommendations to the usual meal size by default, then account for deliberately requested leftover portions.
+- Record explicit likes, dislikes, dietary restrictions, allergies, cuisines, spice level, textures, effort, and leftover preferences.
+- Keep recipe-specific feedback in the recipe or cooking log. Promote it to a general preference only when the user states it generally or a repeated pattern supports it.
+- Never infer an allergy or dietary restriction from a dislike, nor erase an existing restriction without explicit confirmation.
+- Update the profile timestamp whenever persistent preferences change.
 
 ## Maintain recipes
 
@@ -71,16 +82,19 @@ If the user does not answer the leftover question, leave the pending check in th
 - Use stable recipe IDs so later ratings, cook history, and variations refer to the same recipe.
 - Record substitutions only when they are plausible; state likely changes to flavor, texture, cook time, or yield.
 
-## Find what to cook
+## Find what to eat
 
 Rank options using this order:
 
 1. dietary restrictions and allergen safety
-2. expired or unsafe ingredients are excluded
-3. user constraints such as time, equipment, effort, and servings
-4. ingredients that should be used soon
-5. pantry coverage and missing required ingredients
-6. user preferences, ratings, and variety from recent meals
+2. safe prepared leftovers, ordered by earliest known use-by date
+3. expired or unsafe ingredients are excluded
+4. user constraints such as time, equipment, effort, and usual meal size
+5. ingredients that should be used soon
+6. pantry coverage and missing required ingredients
+7. user preferences, ratings, and variety from recent meals
+
+Offer a safe leftover as the default next meal when it can cover the requested diners. If it is short on portions, suggest a simple side or combine compatible leftovers. Respect an explicit request to cook something new, but still mention leftovers that need attention soon. Never recommend a leftover as safe when storage history is unknown or questionable.
 
 Run deterministic pantry matching as a starting point:
 
@@ -88,7 +102,7 @@ Run deterministic pantry matching as a starting point:
 python3 <skill-directory>/scripts/kitchen.py match <kitchen-directory> --top 5 --days 7
 ```
 
-Treat name-based matches as candidates, not proof that quantities are sufficient. Check quantities and units before presenting a recipe as fully cookable.
+The match command prints ready leftovers before recipe candidates. Treat name-based recipe matches as candidates, not proof that quantities are sufficient. Check quantities and units before presenting a recipe as fully cookable.
 
 For each recommendation, report why it fits now, what it uses, what is missing or uncertain, relevant constraints, and one useful variation when it adds value.
 

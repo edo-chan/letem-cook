@@ -29,12 +29,15 @@ class KitchenTest(unittest.TestCase):
             kitchen = Path(directory) / "kitchen"
             KITCHEN.initialize(kitchen, force=False)
 
-            inventory, recipes, inspiration, cooking_log = KITCHEN.load_and_validate(kitchen)
+            inventory, recipes, inspiration, cooking_log, profile = KITCHEN.load_and_validate(
+                kitchen
+            )
 
             self.assertEqual(inventory, [])
             self.assertEqual(recipes["recipes"], [])
             self.assertEqual(inspiration["ideas"], [])
             self.assertIn("## Pending inventory check", cooking_log)
+            self.assertEqual(profile["Usual meal size"], "unknown")
 
     def test_init_refuses_to_overwrite(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -101,6 +104,52 @@ class KitchenTest(unittest.TestCase):
             self.assertIn("Missing: pasta", result.stdout)
             self.assertIn("Expiring soon: baby spinach", result.stdout)
 
+    def test_match_prioritizes_ready_leftovers(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            kitchen = Path(directory) / "kitchen"
+            KITCHEN.initialize(kitchen, force=False)
+            inventory_path = kitchen / "inventory.md"
+            inventory_path.write_text(
+                "# Ingredient Inventory\n\n"
+                "Last updated: 2026-07-12T15:00:00Z\n\n"
+                f"{KITCHEN.INVENTORY_HEADER}\n"
+                f"{KITCHEN.INVENTORY_SEPARATOR}\n"
+                "| chili-leftover | Bean chili | 2 | portions | leftover | fridge | "
+                f"{(date.today() + timedelta(days=2)).isoformat()} | yes | Cooked yesterday. |\n"
+            )
+
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "match", str(kitchen)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertIn("Eat leftovers first:", result.stdout)
+            self.assertIn("Bean chili (2 portions", result.stdout)
+            self.assertLess(
+                result.stdout.index("Eat leftovers first:"),
+                result.stdout.index("No saved recipes"),
+            )
+
+    def test_leftover_without_use_by_date_is_not_presented_as_ready(self) -> None:
+        inventory = [
+            {
+                "id": "unknown-leftover",
+                "name": "Mystery leftovers",
+                "quantity": "1",
+                "unit": "portion",
+                "category": "leftover",
+                "location": "fridge",
+                "use_by": "unknown",
+                "opened": "yes",
+                "notes": "",
+            }
+        ]
+
+        self.assertEqual(KITCHEN.ready_leftovers(inventory), [])
+        self.assertEqual(KITCHEN.leftovers_needing_review(inventory), inventory)
+
     def test_validation_rejects_malformed_inventory_row(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             kitchen = Path(directory) / "kitchen"
@@ -124,6 +173,10 @@ class KitchenTest(unittest.TestCase):
         self.assertIn("Are there any ingredients left?", skill)
         self.assertIn("Wait for the answer before changing consumed quantities", skill)
         self.assertIn("leave the pending check in the log", skill)
+        self.assertIn("safe prepared leftovers", skill)
+        self.assertIn("usual meal size", skill)
+        self.assertIn("whether they would make it again", skill)
+        self.assertIn("Treat `profile.md` as the source of truth", skill)
 
 
 if __name__ == "__main__":
