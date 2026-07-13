@@ -12,6 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "skills" / "letem-cook" / "scripts" / "kitchen.py"
+EXAMPLE = ROOT / "skills" / "letem-cook" / "examples" / "ed-kitchen"
 SPEC = importlib.util.spec_from_file_location("kitchen", SCRIPT)
 assert SPEC and SPEC.loader
 KITCHEN = importlib.util.module_from_spec(SPEC)
@@ -19,6 +20,24 @@ SPEC.loader.exec_module(KITCHEN)
 
 
 class KitchenTest(unittest.TestCase):
+    def test_bundled_example_uses_confirmed_inventory_without_guessing(self) -> None:
+        inventory, recipes, inspiration, cooking_log, profile = KITCHEN.load_and_validate(EXAMPLE)
+        by_name = {item["name"]: item for item in inventory}
+
+        self.assertEqual(len(inventory), 5)
+        self.assertEqual(by_name["T-bone steak"]["quantity"], "0.5")
+        self.assertEqual(by_name["Croissants"]["quantity"], "4")
+        self.assertEqual(by_name["Alpaca chicken"]["quantity"], "2")
+        self.assertEqual(by_name["Cooked rice"]["unit"], "bento box")
+        self.assertEqual(by_name["Dim sum"]["location"], "fridge")
+        self.assertEqual(by_name["Dim sum"]["use_by"], "unknown")
+        self.assertEqual(KITCHEN.ready_leftovers(inventory), [])
+        self.assertEqual(len(KITCHEN.leftovers_needing_review(inventory)), 4)
+        self.assertIn("T-bone steak", cooking_log)
+        self.assertEqual(profile["Usual meal size"], "unknown")
+        self.assertEqual(recipes["recipes"], [])
+        self.assertEqual(inspiration["ideas"], [])
+
     def test_commands_default_to_persistent_memory_directory(self) -> None:
         args = KITCHEN.build_parser().parse_args(["status"])
 

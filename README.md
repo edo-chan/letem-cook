@@ -53,6 +53,15 @@ By default this creates private, persistent memory at `~/.letem-cook`. Set `LETE
 
 See [the data model](skills/letem-cook/references/data-model.md) for the record formats.
 
+## Example kitchen
+
+The bundled [example kitchen](skills/letem-cook/examples/ed-kitchen) uses Ed's real starter inventory: half a T-bone steak, four croissants, two pieces of Alpaca chicken, a bento box of cooked rice, and a snack-size savory-and-sweet dim sum set. Unknown storage and dates remain unknown on purpose.
+
+```bash
+python3 skills/letem-cook/scripts/kitchen.py validate skills/letem-cook/examples/ed-kitchen
+python3 skills/letem-cook/scripts/kitchen.py status skills/letem-cook/examples/ed-kitchen
+```
+
 ## Development
 
 ```bash

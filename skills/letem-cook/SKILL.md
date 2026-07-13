@@ -19,6 +19,8 @@ Resolve the kitchen workspace from `LETEM_COOK_HOME` when set; otherwise use `~/
 
 Do not rely on chat context as a substitute for these files. If `cooking-log.md` contains a pending inventory check, resolve it before making inventory-dependent recommendations.
 
+Use [examples/ed-kitchen](examples/ed-kitchen) as a concrete example of a valid workspace built from a real inventory conversation. Notice that it preserves unknown locations and dates, records the confirmed dim sum location, and keeps the steak reconciliation pending rather than inventing facts.
+
 If no workspace exists, initialize one with:
 
 ```bash
