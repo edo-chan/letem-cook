@@ -1,6 +1,6 @@
 ---
 name: letem-cook
-description: Run an agentic kitchen and pantry with persistent Markdown memory for perishable ingredients, categorized pantry and pet supplies, consumption, cooking level, leftovers, cooking history, meal size, per-person flavor profiles, recipes, inspiration, substitutions, and variations. Use when a user records groceries, pantry goods, tea, coffee, noodles, pasta, pet wet or dry food, eating, drinking, usage, or feeding; asks whether to buy an item, whether it is at home, whether a dish is cookable, what to eat, or for a profile-aware shopping list; needs recipe instructions adapted to six 1-10 cooking-skill dimensions; finishes cooking; gives meal feedback; reduces waste; saves or adapts recipes; or initializes a Let Em Cook workspace.
+description: Run an agentic kitchen and pantry with persistent Markdown memory for perishable ingredients, categorized pantry and pet supplies, consumption, leftovers, durable meal plans, per-meal nutrition estimates, cooking level and history, meal size, per-person flavor profiles, recipes, inspiration, substitutions, and variations. Use when a user records groceries, pantry goods, tea, coffee, noodles, pasta, pet wet or dry food, eating, drinking, usage, or feeding; asks whether to buy an item, whether it is at home, whether a dish is cookable, what to eat, what to plan across future meals, or for a profile-aware shopping list; needs meal balance or recipe instructions adapted to six 1-10 cooking-skill dimensions; finishes cooking; gives meal feedback; reduces waste; saves or adapts recipes; or initializes a Let Em Cook workspace.
 ---
 
 # Let Em Cook
@@ -10,7 +10,7 @@ Operate a local-first agentic kitchen. Treat the kitchen workspace as durable me
 ## Act as an agentic kitchen
 
 - Read current memory before deciding what to do.
-- Take the next useful in-scope action: record food, reconcile a cooked meal, surface a leftover, organize the pantry, or rank realistic meal options.
+- Take the next useful in-scope action: record food, reconcile a cooked meal, maintain the meal plan, surface a leftover, organize the pantry, or rank realistic meal options.
 - Ask only for missing facts that materially affect storage, safety, quantity, categorization, or the requested decision.
 - Persist confirmed changes immediately, validate the workspace, and state what remains unknown.
 - Keep the agentic pantry separate from the active ingredient inventory while using both food memories for recipe matching.
@@ -22,6 +22,7 @@ Resolve the kitchen workspace from `LETEM_COOK_HOME` when set; otherwise use `~/
 - `inventory.md` for the canonical current ingredient inventory
 - `pantry.md` for the canonical categorized pantry memory
 - `consumption-log.md` for confirmed eating, drinking, usage, and pet feeding
+- `meal-plan.md` for dated meals, reserved ingredients, status, nutrition estimates, and balance checks
 - `cooking-log.md` for pending post-cook checks and recent outcomes
 - `people.md` for per-person flavor profiles and evidence counts
 - `profile.md` for usual meal size, diners, constraints, and preferences
@@ -30,7 +31,7 @@ Resolve the kitchen workspace from `LETEM_COOK_HOME` when set; otherwise use `~/
 
 Do not rely on chat context as a substitute for these files. If `cooking-log.md` contains a pending inventory check, resolve it before making inventory-dependent recommendations.
 
-Use [examples/ed-kitchen](examples/ed-kitchen) as a concrete example of a valid workspace built from a real inventory conversation. Notice that it keeps miso, noodles, pasta, tea, and coffee in the agentic pantry, logs confirmed steak consumption, preserves unknown facts, and keeps the steak reconciliation pending rather than inventing storage or dates.
+Use [examples/ed-kitchen](examples/ed-kitchen) as a concrete example of a valid workspace built from a real inventory conversation. Notice that it keeps miso, noodles, pasta, tea, and coffee in the agentic pantry, logs confirmed steak consumption, preserves unknown facts, keeps the steak reconciliation pending rather than inventing storage or dates, and records tomorrow's meals as conditional until storage safety is confirmed.
 
 If no workspace exists, initialize one with:
 
@@ -105,6 +106,7 @@ If the user does not answer the leftover question, leave the pending check in th
 - If usual meal size is unknown, ask once before scaling a recipe or planning portions. Store the answer as servings and note the usual number of diners when supplied.
 - Scale recipe recommendations to the usual meal size by default, then account for deliberately requested leftover portions.
 - Record household-wide likes, dislikes, dietary restrictions, allergies, cuisines, spice level, textures, effort, and leftover preferences only when they genuinely apply to the household.
+- Record household nutrition priorities only when explicitly supplied. Do not invent calorie, macro, weight, or medical targets.
 - Keep recipe-specific feedback in the recipe or cooking log. Promote it to a general preference only when the user states it generally or a repeated pattern supports it.
 - Never infer an allergy or dietary restriction from a dislike, nor erase an existing restriction without explicit confirmation.
 - Do not let a household default overwrite a named person's profile.
@@ -148,6 +150,48 @@ Do not treat silence as approval, calculate a false consensus, or erase minority
 - Use stable recipe IDs so later ratings, cook history, and variations refer to the same recipe.
 - Record substitutions only when they are plausible; state likely changes to flavor, texture, cook time, or yield.
 
+## Plan meals across time
+
+Treat `meal-plan.md` as durable multi-meal memory, not a one-turn suggestion. For requests such as “What should we eat for lunch and dinner tomorrow?”:
+
+1. Establish the requested dates and meal slots, diners, servings, time, and effort constraints. Use the household defaults only when known.
+2. Resolve storage and safety questions that can change the answer. Exclude unsafe food; keep a meal `conditional` when a necessary storage, freshness, or quantity fact remains unknown.
+3. Assign confirmed safe leftovers to the earliest suitable slots, ordered by earliest known use-by date. A planned use reserves the quantity but does not deduct it.
+4. Fill open slots from saved recipes, meals cooked before, explicit user ideas, and simple continuations of familiar food. Prefer the foods and cuisines the household already likes.
+5. Treat pantry coverage as a constraint, not an objective. Do not maximize the number of pantry ingredients used, cram every available item into the plan, or distort a meal to empty the pantry. Focus on a small number of items that need attention and leave useful staples alone.
+6. Do not recommend wildly new recipes. If no meaningful match exists among safe leftovers, saved recipes, established meals, and dishes the user requested, stop and ask what dish or cuisine direction they want before suggesting a new dish.
+7. Avoid double-booking the same quantity across slots. Record reserved items in `Uses`, but update `inventory.md`, `pantry.md`, and `consumption-log.md` only after confirmed consumption.
+8. Plan extra portions only when the household wants leftovers or the user explicitly requests batch cooking. Do not assume every cooked dinner should create another meal.
+9. Create the shopping gaps only after the meal plan is coherent. Prefer `check first` when the available quantity is unknown.
+10. Persist every planned slot and run validation. Show the current plan with:
+
+```bash
+python3 <skill-directory>/scripts/kitchen.py plan <kitchen-directory> --days 7
+```
+
+Use these statuses:
+
+- `planned`: a future cook or assembly plan supported by enough facts
+- `conditional`: the meal depends on unresolved safety, freshness, quantity, or availability
+- `ready`: a confirmed safe prepared meal is ready to serve
+- `completed`: the meal was eaten and its inventory and consumption records were reconciled
+- `skipped`: the slot was not eaten as planned
+
+When a planned meal is completed or skipped, update its status and notes, reconcile actual amounts and leftovers, and re-evaluate later slots that reserved the same food. Never record planned consumption as confirmed consumption.
+
+## Estimate nutrition and balance meals
+
+Store per-serving estimates in `meal-plan.md` for calories, protein, carbohydrates, fat, fiber, and sodium. These are planning estimates, not laboratory measurements.
+
+- Start with the actual serving size and ingredient amounts. Prefer a supplied Nutrition Facts label or published restaurant nutrition; otherwise use the closest appropriate entry in [USDA FoodData Central](https://fdc.nal.usda.gov/) and state the important assumptions.
+- Add component nutrients, divide by the planned servings, and use a low-high range when portion size, takeout composition, cooking fat, sauce, or recipe yield is uncertain. Round sensibly. Use `unknown` rather than false precision.
+- Keep estimates per serving. Do not silently turn a package's labeled serving into the amount a person will actually eat.
+- Balance first against explicit `Nutrition priorities` in `profile.md`. Without a personal target, use a general plate check: a meaningful protein source, produce and fiber, reasonable energy for the meal, and awareness of sodium. USDA MyPlate's produce guidance and FDA Daily Values can inform the explanation, but daily reference values are not automatic per-meal prescriptions.
+- Prefer familiar, minimal corrections: add an existing simple produce side or fruit as-is, adjust the portion, or rebalance components already in the meal. Do not invent a new recipe merely to improve a score, and do not force the use of unrelated pantry items.
+- Report the main tradeoff in the `Balance` field, such as “strong protein and fiber; sodium likely high.” Do not reduce balance to calories alone.
+- If the user supplies actual portions after eating, revise the completed meal's estimate when useful. Keep the estimate clearly separate from the confirmed food amount in `consumption-log.md`.
+- Do not infer medical conditions, weight goals, pregnancy, or therapeutic nutrient limits. For medical nutrition planning, use user-provided clinician guidance and recommend confirmation with a qualified professional.
+
 ## Find what to eat
 
 Rank options using this order:
@@ -157,10 +201,12 @@ Rank options using this order:
 3. expired or unsafe ingredients are excluded
 4. user constraints such as time, equipment, effort, and usual meal size
 5. ingredients that should be used soon
-6. inventory and food-pantry coverage and missing required ingredients
+6. inventory and food-pantry coverage and missing required ingredients, without maximizing ingredient use
 7. relevant people's flavor profiles, ratings, and variety from recent meals
 
 Offer a safe leftover as the default next meal when it can cover the requested diners. If it is short on portions, suggest a simple side or combine compatible leftovers. Respect an explicit request to cook something new, but still mention leftovers that need attention soon. Never recommend a leftover as safe when storage history is unknown or questionable.
+
+Prefer known dishes, saved recipes, previous meals, and explicit cravings. When none meaningfully match the current constraints, ask for a dish or cuisine direction before proposing new dishes.
 
 Run deterministic pantry matching as a starting point:
 
