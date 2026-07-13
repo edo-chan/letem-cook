@@ -34,15 +34,18 @@ class KitchenTest(unittest.TestCase):
         ) = KITCHEN.load_and_validate(EXAMPLE)
         by_name = {item["name"]: item for item in inventory}
 
-        self.assertEqual(len(inventory), 5)
+        self.assertEqual(len(inventory), 11)
         self.assertEqual(by_name["T-bone steak"]["quantity"], "0.5")
         self.assertEqual(by_name["Croissants"]["quantity"], "4")
         self.assertEqual(by_name["Alpaca chicken"]["quantity"], "2")
         self.assertEqual(by_name["Cooked rice"]["unit"], "bento box")
         self.assertEqual(by_name["Dim sum"]["location"], "fridge")
         self.assertEqual(by_name["Dim sum"]["use_by"], "unknown")
+        self.assertEqual(by_name["Spring mix"]["quantity"], "about 0.2")
+        self.assertEqual(by_name["Brioche bread"]["location"], "fridge")
+        self.assertEqual(by_name["Blue crab"]["quantity"], "1")
         self.assertEqual(KITCHEN.ready_leftovers(inventory), [])
-        self.assertEqual(len(KITCHEN.leftovers_needing_review(inventory)), 4)
+        self.assertEqual(len(KITCHEN.leftovers_needing_review(inventory)), 8)
         self.assertEqual(len(pantry), 5)
         pantry_by_name = {item["name"]: item for item in pantry}
         self.assertEqual(pantry_by_name["Miso"]["category"], "condiments")
