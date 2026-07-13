@@ -1,49 +1,74 @@
 ---
 name: letem-cook
-description: Manage a local home kitchen system that connects ingredient inventory and expiration tracking, a personal recipe library, recipe inspiration, substitutions, and variations. Use when a user wants to record groceries or pantry changes, decide what to cook from ingredients on hand, reduce food waste, save or adapt recipes, plan meals, brainstorm dishes, or initialize and maintain the Let Em Cook JSON workspace.
+description: Manage a persistent local home-kitchen memory that connects Markdown ingredient inventory and cooking history with a personal recipe library, recipe inspiration, substitutions, and variations. Use when a user wants to record groceries or pantry changes, cook from ingredients on hand, finish a cooking session and reconcile leftovers, reduce food waste, save or adapt recipes, plan meals, brainstorm dishes, or initialize and maintain a Let Em Cook workspace.
 ---
 
 # Let Em Cook
 
-Operate a local-first home-chef system. Treat the user's kitchen files as the source of truth, preserve uncertainty, and turn available ingredients into realistic cooking options.
+Operate a local-first home-chef system. Treat the kitchen workspace as durable memory, preserve uncertainty, and turn available ingredients into realistic cooking options.
 
-## Start or locate the kitchen
+## Load memory first
 
-Look for `inventory.json`, `recipes.json`, and `inspiration.json` in the user's chosen kitchen directory. If no workspace exists, initialize one with:
+Resolve the kitchen workspace from `LETEM_COOK_HOME` when set; otherwise use `~/.letem-cook`. Treat that directory as actual persistent memory, not a disposable output. Before answering any inventory-dependent request, read:
+
+- `inventory.md` for the canonical current ingredient inventory
+- `cooking-log.md` for pending post-cook checks and recent outcomes
+- `recipes.json` when saved recipes matter
+- `inspiration.json` when ideas or variations matter
+
+Do not rely on chat context as a substitute for these files. If `cooking-log.md` contains a pending inventory check, resolve it before making inventory-dependent recommendations.
+
+If no workspace exists, initialize one with:
 
 ```bash
-python3 <skill-directory>/scripts/kitchen.py init <kitchen-directory>
+python3 <skill-directory>/scripts/kitchen.py init
 ```
 
-Do not overwrite an existing workspace unless the user explicitly asks. Read [references/data-model.md](references/data-model.md) before directly editing kitchen records.
-
-Validate after modifying JSON:
+Pass an explicit directory only when the user chooses a different memory location. Do not overwrite an existing workspace unless the user explicitly asks. Read [references/data-model.md](references/data-model.md) before directly editing memory. Validate after every memory update:
 
 ```bash
-python3 <skill-directory>/scripts/kitchen.py validate <kitchen-directory>
+python3 <skill-directory>/scripts/kitchen.py validate
 ```
 
-## Maintain ingredient inventory
+## Maintain ingredient memory
 
+- Treat `inventory.md` as the only source of truth for current ingredients.
 - Record only quantities, dates, locations, and states the user supplied or confirmed.
-- Use `null` for an unknown quantity or expiration date; never convert uncertainty into a guessed value.
-- Keep one stable item ID per separately tracked package or batch when expiration dates differ.
-- Update `updated_at` whenever an item changes.
+- Write `unknown` when a quantity, opened state, or use-by date is unknown; never guess.
+- Keep one stable item ID per separately tracked package or batch when use-by dates differ.
+- Update the `Last updated` timestamp whenever the inventory changes.
 - Reduce or remove quantities only after the user reports consumption, disposal, or correction.
+- Keep an exhausted item at quantity `0` only when its history is useful; otherwise remove its row.
+- Add cooked leftovers as new inventory items with their storage location and date when known.
 - Flag expired food and uncertain food safety; do not recommend questionable ingredients merely to avoid waste.
 
-Use the status command to surface inventory totals and near-term expirations:
+Use the status command to surface inventory totals and near-term use-by dates:
 
 ```bash
 python3 <skill-directory>/scripts/kitchen.py status <kitchen-directory> --days 7
 ```
+
+## Complete every cooking session
+
+Treat post-cook reconciliation as mandatory, not optional.
+
+1. When cooking begins, add the meal under `Pending inventory check` in `cooking-log.md`.
+2. After the final cooking step, or as soon as the user says they finished cooking, ask: **“Are there any ingredients left? If so, what is left and about how much?”**
+3. Also ask how the dish turned out when the user has not already said.
+4. Wait for the answer before changing consumed quantities. Do not deduct the recipe's planned amounts automatically.
+5. Update every affected row in `inventory.md`, including partial amounts, newly opened state, discarded food, and prepared leftovers.
+6. Update `Last updated`, append the result under `Cooked meals`, and remove the matching pending check.
+7. Update the saved recipe's `last_cooked`, rating, or notes only when the user supplied those facts.
+8. Run validation and briefly confirm the memory changes.
+
+If the user does not answer the leftover question, leave the pending check in the log and do not invent an inventory update. At the start of the next kitchen interaction, ask to resolve that pending check before claiming the inventory is current.
 
 ## Maintain recipes
 
 - Preserve the original recipe and source when known.
 - Store required and optional ingredients separately through each ingredient's `optional` field.
 - Keep instructions executable: ordered steps, expected servings, and important timing or equipment notes.
-- Use stable recipe IDs so later ratings, cook history, and variations can refer to the same recipe.
+- Use stable recipe IDs so later ratings, cook history, and variations refer to the same recipe.
 - Record substitutions only when they are plausible; state likely changes to flavor, texture, cook time, or yield.
 
 ## Find what to cook
@@ -51,10 +76,10 @@ python3 <skill-directory>/scripts/kitchen.py status <kitchen-directory> --days 7
 Rank options using this order:
 
 1. dietary restrictions and allergen safety
-2. ingredients that are expired or unsafe to use are excluded
+2. expired or unsafe ingredients are excluded
 3. user constraints such as time, equipment, effort, and servings
-4. recipes that use ingredients expiring soon
-5. pantry coverage and number of missing required ingredients
+4. ingredients that should be used soon
+5. pantry coverage and missing required ingredients
 6. user preferences, ratings, and variety from recent meals
 
 Run deterministic pantry matching as a starting point:
@@ -65,36 +90,18 @@ python3 <skill-directory>/scripts/kitchen.py match <kitchen-directory> --top 5 -
 
 Treat name-based matches as candidates, not proof that quantities are sufficient. Check quantities and units before presenting a recipe as fully cookable.
 
-For each recommendation, report:
+For each recommendation, report why it fits now, what it uses, what is missing or uncertain, relevant constraints, and one useful variation when it adds value.
 
-- why it fits now
-- ingredients on hand that it uses, especially expiring items
-- required ingredients that are missing or uncertain
-- realistic time, equipment, or skill constraints when known
-- one useful variation, if it adds value
+## Capture inspiration and variations
 
-## Capture inspiration
+Use inspiration records for promising ideas that are not yet complete recipes. Base them on ingredients to use soon, complementary staples, seasonal themes, cuisines, techniques, leftovers, or user cravings. Promote an idea to `recipes.json` only after it is repeatable.
 
-Use inspiration records for promising ideas that are not yet complete recipes. Base ideas on some combination of expiring ingredients, complementary pantry staples, seasonal themes, cuisines, techniques, leftovers, or user cravings.
-
-Keep an inspiration item concise. Include anchor ingredients, tags, status, notes, and candidate variations. Promote it to `recipes.json` only after there is enough detail to cook it repeatably.
-
-## Create variations
-
-Label the kind of change:
-
-- **substitution**: replace an ingredient and explain the tradeoff
-- **dietary adaptation**: satisfy a stated restriction without claiming allergen safety when cross-contact or labels are unknown
-- **technique variation**: change the cooking method
-- **format variation**: reuse the flavor profile as a bowl, soup, sandwich, pasta, salad, or similar form
-- **scale variation**: adjust servings while calling out ingredients or timings that do not scale linearly
-
-Preserve the recipe's identity. Prefer one to three deliberate changes over an unbounded list of swaps.
+Label recipe changes as a substitution, dietary adaptation, technique variation, format variation, or scale variation. Explain important tradeoffs and prefer one to three deliberate changes over an unbounded list of swaps.
 
 ## Apply safety boundaries
 
 - Ask about dietary restrictions or allergies when they materially affect recommendations and are not known.
 - Never infer allergen-free status from an ingredient name alone.
-- Do not treat an expiration date as the sole food-safety test. Call out uncertainty around storage history, spoilage, raw animal products, and leftovers.
+- Do not treat a use-by date as the sole food-safety test. Call out uncertainty around storage history, spoilage, raw animal products, and leftovers.
 - Distinguish food-safety guidance from taste or quality advice.
 - Use authoritative local guidance for exact safe temperatures or storage windows when high-stakes food-safety advice is requested.

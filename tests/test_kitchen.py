@@ -19,16 +19,22 @@ SPEC.loader.exec_module(KITCHEN)
 
 
 class KitchenTest(unittest.TestCase):
+    def test_commands_default_to_persistent_memory_directory(self) -> None:
+        args = KITCHEN.build_parser().parse_args(["status"])
+
+        self.assertEqual(args.kitchen, KITCHEN.default_kitchen())
+
     def test_init_and_validate_empty_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             kitchen = Path(directory) / "kitchen"
             KITCHEN.initialize(kitchen, force=False)
 
-            inventory, recipes, inspiration = KITCHEN.load_and_validate(kitchen)
+            inventory, recipes, inspiration, cooking_log = KITCHEN.load_and_validate(kitchen)
 
-            self.assertEqual(inventory["items"], [])
+            self.assertEqual(inventory, [])
             self.assertEqual(recipes["recipes"], [])
             self.assertEqual(inspiration["ideas"], [])
+            self.assertIn("## Pending inventory check", cooking_log)
 
     def test_init_refuses_to_overwrite(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -42,24 +48,16 @@ class KitchenTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             kitchen = Path(directory) / "kitchen"
             KITCHEN.initialize(kitchen, force=False)
-            inventory_path = kitchen / "inventory.json"
+            inventory_path = kitchen / "inventory.md"
             recipes_path = kitchen / "recipes.json"
-            inventory = json.loads(inventory_path.read_text())
-            inventory["items"] = [
-                {
-                    "id": "spinach",
-                    "name": "Baby Spinach",
-                    "quantity": 5,
-                    "unit": "oz",
-                    "category": "produce",
-                    "location": "fridge",
-                    "expires_on": (date.today() + timedelta(days=2)).isoformat(),
-                    "opened": True,
-                    "notes": "",
-                    "updated_at": "2026-07-12T15:00:00Z",
-                }
-            ]
-            inventory_path.write_text(json.dumps(inventory))
+            inventory_path.write_text(
+                "# Ingredient Inventory\n\n"
+                "Last updated: 2026-07-12T15:00:00Z\n\n"
+                f"{KITCHEN.INVENTORY_HEADER}\n"
+                f"{KITCHEN.INVENTORY_SEPARATOR}\n"
+                "| spinach | Baby Spinach | 5 | oz | produce | fridge | "
+                f"{(date.today() + timedelta(days=2)).isoformat()} | yes | |\n"
+            )
             recipes = json.loads(recipes_path.read_text())
             recipes["recipes"] = [
                 {
@@ -103,17 +101,29 @@ class KitchenTest(unittest.TestCase):
             self.assertIn("Missing: pasta", result.stdout)
             self.assertIn("Expiring soon: baby spinach", result.stdout)
 
-    def test_validation_rejects_missing_required_inventory_field(self) -> None:
+    def test_validation_rejects_malformed_inventory_row(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             kitchen = Path(directory) / "kitchen"
             KITCHEN.initialize(kitchen, force=False)
-            inventory_path = kitchen / "inventory.json"
-            inventory = json.loads(inventory_path.read_text())
-            inventory["items"] = [{}]
-            inventory_path.write_text(json.dumps(inventory))
+            inventory_path = kitchen / "inventory.md"
+            inventory_path.write_text(
+                "# Ingredient Inventory\n\n"
+                "Last updated: 2026-07-12T15:00:00Z\n\n"
+                f"{KITCHEN.INVENTORY_HEADER}\n"
+                f"{KITCHEN.INVENTORY_SEPARATOR}\n"
+                "| spinach | Baby Spinach | 5 | oz |\n"
+            )
 
-            with self.assertRaisesRegex(KITCHEN.KitchenError, "is missing"):
+            with self.assertRaisesRegex(KITCHEN.KitchenError, "must have 9 columns"):
                 KITCHEN.load_and_validate(kitchen)
+
+    def test_skill_requires_post_cook_leftover_reconciliation(self) -> None:
+        skill = (ROOT / "skills" / "letem-cook" / "SKILL.md").read_text()
+
+        self.assertIn("Treat post-cook reconciliation as mandatory", skill)
+        self.assertIn("Are there any ingredients left?", skill)
+        self.assertIn("Wait for the answer before changing consumed quantities", skill)
+        self.assertIn("leave the pending check in the log", skill)
 
 
 if __name__ == "__main__":

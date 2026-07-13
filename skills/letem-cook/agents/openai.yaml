@@ -1,4 +1,4 @@
 interface:
   display_name: "Let Em Cook"
-  short_description: "Plan meals from what is already in your kitchen"
-  default_prompt: "Use $letem-cook to suggest what I can cook from my current ingredients."
+  short_description: "Track kitchen memory and reconcile every cooked meal"
+  default_prompt: "Use $letem-cook to read my kitchen memory and help me decide what to cook."
