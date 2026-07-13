@@ -28,3 +28,4 @@ Last updated: never
 - Texture preferences: unknown
 - Effort preference: unknown
 - Leftover preference: eat safe leftovers before cooking a new meal
+- Nutrition priorities: unknown

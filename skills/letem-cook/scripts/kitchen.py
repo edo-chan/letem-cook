@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Initialize, validate, summarize, find, and match a Let Em Cook kitchen."""
+"""Initialize, validate, summarize, find, match, and show a Let Em Cook meal plan."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import re
 import shutil
 import sys
 from datetime import date, timedelta
@@ -17,6 +18,7 @@ FILES = (
     "inventory.md",
     "pantry.md",
     "consumption-log.md",
+    "meal-plan.md",
     "cooking-log.md",
     "people.md",
     "profile.md",
@@ -60,6 +62,22 @@ COOKING_DIMENSIONS = (
 CONSUMPTION_HEADER = "| Date | Item | Amount | Unit | Consumer | Source | Notes |"
 CONSUMPTION_SEPARATOR = "| --- | --- | --- | --- | --- | --- | --- |"
 CONSUMPTION_SOURCES = {"inventory", "pantry", "meal", "outside", "unknown"}
+MEAL_PLAN_HEADER = (
+    "| Date | Meal | Diners | Servings | Status | Menu | Uses | Prep | "
+    "Calories/serving | Protein g | Carbs g | Fat g | Fiber g | Sodium mg | "
+    "Balance | Notes |"
+)
+MEAL_PLAN_SEPARATOR = "| " + " | ".join(["---"] * 16) + " |"
+MEAL_PLAN_STATUSES = {"planned", "conditional", "ready", "completed", "skipped"}
+NUTRITION_VALUE = re.compile(r"(?:unknown|\d+(?:\.\d+)?(?:-\d+(?:\.\d+)?)?)", re.IGNORECASE)
+MEAL_ORDER = {
+    "breakfast": 0,
+    "brunch": 1,
+    "lunch": 2,
+    "snack": 3,
+    "dinner": 4,
+    "supper": 4,
+}
 
 
 class KitchenError(ValueError):
@@ -269,6 +287,96 @@ def load_consumption_log(path: Path) -> list[dict[str, str]]:
     return entries
 
 
+def load_meal_plan(path: Path) -> list[dict[str, str]]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError as error:
+        raise KitchenError(f"missing {path}") from error
+    if not lines or lines[0] != "# Meal Plan":
+        raise KitchenError(f"{path} must start with '# Meal Plan'")
+    if not any(line.startswith("Last updated: ") for line in lines):
+        raise KitchenError(f"{path} is missing the Last updated line")
+    if "## Meals" not in lines:
+        raise KitchenError(f"{path} is missing '## Meals'")
+    try:
+        header_index = lines.index(MEAL_PLAN_HEADER)
+    except ValueError as error:
+        raise KitchenError(f"{path} is missing the meal-plan table header") from error
+    if header_index + 1 >= len(lines) or lines[header_index + 1] != MEAL_PLAN_SEPARATOR:
+        raise KitchenError(f"{path} has an invalid meal-plan table separator")
+
+    meals: list[dict[str, str]] = []
+    slots: set[tuple[str, str]] = set()
+    fields = (
+        "date",
+        "meal",
+        "diners",
+        "servings",
+        "status",
+        "menu",
+        "uses",
+        "prep",
+        "calories",
+        "protein_g",
+        "carbs_g",
+        "fat_g",
+        "fiber_g",
+        "sodium_mg",
+        "balance",
+        "notes",
+    )
+    for line_number, line in enumerate(lines[header_index + 2 :], start=header_index + 3):
+        if not line.startswith("|"):
+            break
+        values = [value.strip() for value in line.strip().strip("|").split("|")]
+        if len(values) != len(fields):
+            raise KitchenError(
+                f"meal-plan.md line {line_number} must have {len(fields)} columns"
+            )
+        meal = dict(zip(fields, values, strict=True))
+        context = f"meal-plan.md line {line_number}"
+        parse_date(meal["date"], f"{context}.date")
+        for field in ("meal", "diners", "servings", "menu"):
+            if not meal[field]:
+                raise KitchenError(f"{context}.{field} must be non-empty")
+        try:
+            servings = float(meal["servings"])
+        except ValueError as error:
+            raise KitchenError(f"{context}.servings must be a positive number") from error
+        if servings <= 0:
+            raise KitchenError(f"{context}.servings must be a positive number")
+        slot = (meal["date"], meal["meal"].casefold())
+        if slot in slots:
+            raise KitchenError(f"{context} duplicates the {meal['date']} {meal['meal']} slot")
+        slots.add(slot)
+        status = meal["status"].casefold()
+        if status not in MEAL_PLAN_STATUSES:
+            raise KitchenError(
+                f"{context}.status must be one of: {', '.join(sorted(MEAL_PLAN_STATUSES))}"
+            )
+        meal["status"] = status
+        for field in (
+            "calories",
+            "protein_g",
+            "carbs_g",
+            "fat_g",
+            "fiber_g",
+            "sodium_mg",
+        ):
+            value = meal[field].strip()
+            if not NUTRITION_VALUE.fullmatch(value):
+                raise KitchenError(
+                    f"{context}.{field} must be unknown, a non-negative number, "
+                    "or a low-high range"
+                )
+            if "-" in value:
+                low, high = (float(part) for part in value.split("-", maxsplit=1))
+                if low > high:
+                    raise KitchenError(f"{context}.{field} range must go from low to high")
+        meals.append(meal)
+    return meals
+
+
 def load_profile(path: Path) -> dict[str, str]:
     try:
         content = path.read_text(encoding="utf-8")
@@ -297,6 +405,7 @@ def load_profile(path: Path) -> dict[str, str]:
         "Texture preferences",
         "Effort preference",
         "Leftover preference",
+        "Nutrition priorities",
     )
     values: dict[str, str] = {}
     for line in content.splitlines():
@@ -467,19 +576,31 @@ def load_and_validate(
     str,
     dict[str, str],
     list[dict[str, str]],
+    list[dict[str, str]],
     dict[str, dict[str, str]],
 ]:
     inventory = load_inventory(kitchen / "inventory.md")
     pantry = load_pantry(kitchen / "pantry.md")
     cooking_log = validate_cooking_log(kitchen / "cooking-log.md")
     consumption = load_consumption_log(kitchen / "consumption-log.md")
+    meal_plan = load_meal_plan(kitchen / "meal-plan.md")
     profile = load_profile(kitchen / "profile.md")
     people = load_people(kitchen / "people.md")
     recipes = load_json(kitchen / "recipes.json")
     inspiration = load_json(kitchen / "inspiration.json")
     validate_recipes(recipes)
     validate_inspiration(inspiration)
-    return inventory, pantry, recipes, inspiration, cooking_log, profile, consumption, people
+    return (
+        inventory,
+        pantry,
+        recipes,
+        inspiration,
+        cooking_log,
+        profile,
+        consumption,
+        meal_plan,
+        people,
+    )
 
 
 def initialize(kitchen: Path, force: bool) -> None:
@@ -547,9 +668,17 @@ def leftovers_needing_review(inventory: list[dict[str, str]]) -> list[dict[str, 
 
 
 def show_status(kitchen: Path, days: int) -> None:
-    inventory, pantry, recipes, inspiration, cooking_log, profile, consumption, people = (
-        load_and_validate(kitchen)
-    )
+    (
+        inventory,
+        pantry,
+        recipes,
+        inspiration,
+        cooking_log,
+        profile,
+        consumption,
+        meal_plan,
+        people,
+    ) = load_and_validate(kitchen)
     expiring = expiring_items(inventory, days)
     leftovers = ready_leftovers(inventory)
     pending = "None." not in cooking_log.split("## Cooked meals", maxsplit=1)[0]
@@ -572,6 +701,14 @@ def show_status(kitchen: Path, days: int) -> None:
     )
     print(f"People profiles: {len(people)}")
     print(f"Consumption entries: {len(consumption)}")
+    active_meals = [
+        meal for meal in meal_plan if meal["status"] not in {"completed", "skipped"}
+    ]
+    print(f"Active meal-plan slots: {len(active_meals)}")
+    print(
+        "Conditional meal-plan slots: "
+        f"{sum(meal['status'] == 'conditional' for meal in active_meals)}"
+    )
     print(f"Ready leftover meals: {len(leftovers)}")
     print(f"Leftovers needing date review: {len(leftovers_needing_review(inventory))}")
     print(f"Pending inventory check: {'yes' if pending else 'no'}")
@@ -603,6 +740,45 @@ def find_items(kitchen: Path, query: str) -> None:
             f"{item['name']} — {item['quantity']} {item['unit']} in {source}; "
             f"location {item['location']}; date {item['use_by']}; opened {item['opened']}"
         )
+
+
+def show_meal_plan(kitchen: Path, days: int) -> None:
+    *_, meal_plan, _ = load_and_validate(kitchen)
+    start = date.today()
+    cutoff = start + timedelta(days=days)
+    upcoming = [
+        meal
+        for meal in meal_plan
+        if meal["status"] not in {"completed", "skipped"}
+        and start <= date.fromisoformat(meal["date"]) <= cutoff
+    ]
+    if not upcoming:
+        print(f"No active meals planned within {days} days.")
+        return
+    for meal in sorted(
+        upcoming,
+        key=lambda item: (
+            item["date"],
+            MEAL_ORDER.get(item["meal"].casefold(), 99),
+            item["meal"].casefold(),
+        ),
+    ):
+        print(
+            f"{meal['date']} {meal['meal']} — {meal['status']} — {meal['menu']} "
+            f"({meal['servings']} servings for {meal['diners']})"
+        )
+        if meal["prep"]:
+            print(f"  Prep: {meal['prep']}")
+        nutrition = (
+            f"{meal['calories']} kcal; {meal['protein_g']} g protein; "
+            f"{meal['carbs_g']} g carbs; {meal['fat_g']} g fat; "
+            f"{meal['fiber_g']} g fiber; {meal['sodium_mg']} mg sodium"
+        )
+        print(f"  Nutrition/serving: {nutrition}")
+        if meal["balance"]:
+            print(f"  Balance: {meal['balance']}")
+        if meal["notes"]:
+            print(f"  Notes: {meal['notes']}")
 
 
 def match_recipes(kitchen: Path, top: int, days: int) -> None:
@@ -666,6 +842,10 @@ def build_parser() -> argparse.ArgumentParser:
     find_parser = subparsers.add_parser("find", help="find an item at home")
     find_parser.add_argument("query")
     find_parser.add_argument("kitchen", nargs="?", type=Path, default=default_kitchen())
+
+    plan_parser = subparsers.add_parser("plan", help="show upcoming planned meals")
+    plan_parser.add_argument("kitchen", nargs="?", type=Path, default=default_kitchen())
+    plan_parser.add_argument("--days", type=int, default=7)
     return parser
 
 
@@ -687,6 +867,10 @@ def main() -> int:
             match_recipes(args.kitchen, args.top, args.days)
         elif args.command == "find":
             find_items(args.kitchen, args.query)
+        elif args.command == "plan":
+            if args.days < 0:
+                raise KitchenError("--days cannot be negative")
+            show_meal_plan(args.kitchen, args.days)
     except KitchenError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

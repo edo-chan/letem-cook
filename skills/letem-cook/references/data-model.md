@@ -1,6 +1,6 @@
 # Kitchen memory model
 
-Let Em Cook uses six Markdown memory files and two structured JSON stores. Dates use `YYYY-MM-DD`; timestamps use ISO 8601 UTC.
+Let Em Cook uses seven Markdown memory files and two structured JSON stores. Dates use `YYYY-MM-DD`; timestamps use ISO 8601 UTC.
 
 ## `inventory.md`
 
@@ -72,6 +72,28 @@ Last updated: 2026-07-12T19:00:00Z
 ```
 
 Use `inventory`, `pantry`, `meal`, `outside`, or `unknown` for `Source`. Use `unknown` for an unidentified consumer. Do not record planned or inferred consumption.
+
+## `meal-plan.md`
+
+Treat this as durable memory for dated meal slots, ingredient reservations, per-serving nutrition estimates, and completion state.
+
+```markdown
+# Meal Plan
+
+Last updated: 2026-07-13T15:00:00Z
+
+## Meals
+
+| Date | Meal | Diners | Servings | Status | Menu | Uses | Prep | Calories/serving | Protein g | Carbs g | Fat g | Fiber g | Sodium mg | Balance | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-07-14 | lunch | 2 adults | 2 | ready | Bean chili with spinach | bean chili, baby spinach | Reheat chili; serve spinach alongside. | 550-650 | 25-30 | 65-75 | 18-24 | 12-16 | 800-1100 | Strong protein and fiber; sodium may be high. | Nutrition is estimated per serving. |
+```
+
+Use one row per date and meal name. `Servings` must be positive. Status must be `planned`, `conditional`, `ready`, `completed`, or `skipped`. A `conditional` row has an unresolved fact that could invalidate the meal; explain it in `Notes`.
+
+`Uses` reserves planned ingredients but does not deduct inventory. Deduct only after confirmed eating or use, append the actual event to `consumption-log.md`, and then mark the meal `completed`. Reconcile a skipped meal before assigning its reserved food elsewhere.
+
+Nutrition values are per serving. Each accepts `unknown`, a non-negative number, or a `low-high` range. Calories use kcal; protein, carbohydrates, fat, and fiber use grams; sodium uses milligrams. Use ranges for uncertain portions and takeout, `unknown` when the estimate would be unreliable, and the `Balance` field for a concise qualitative assessment. Do not put the pipe character in cell values.
 
 ## `cooking-log.md`
 
@@ -170,9 +192,10 @@ Last updated: 2026-07-12T15:00:00Z
 - Texture preferences: crisp vegetables
 - Effort preference: 30-minute weeknight meals
 - Leftover preference: eat leftovers before cooking a new meal
+- Nutrition priorities: more vegetables and fiber; watch sodium
 ```
 
-Record `unknown` rather than `none` when the user has not answered. Use `none stated` only after the user confirms no restriction or allergy. Keep one comma-separated line per field so the profile remains easy to scan and update.
+Record `unknown` rather than `none` when the user has not answered. Use `none stated` only after the user confirms no restriction or allergy. Keep one comma-separated line per field so the profile remains easy to scan and update. `Nutrition priorities` may contain user-supplied general goals or clinician-provided constraints; never infer them.
 
 Each cooking-level field must be `unknown` or an integer from 1 through 10. Read [cooking-levels.md](cooking-levels.md) for the dimension definitions, evidence policy, and exact instruction-detail rubric.
 

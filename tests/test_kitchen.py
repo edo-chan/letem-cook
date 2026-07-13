@@ -29,6 +29,7 @@ class KitchenTest(unittest.TestCase):
             cooking_log,
             profile,
             consumption,
+            meal_plan,
             people,
         ) = KITCHEN.load_and_validate(EXAMPLE)
         by_name = {item["name"]: item for item in inventory}
@@ -52,6 +53,10 @@ class KitchenTest(unittest.TestCase):
         self.assertEqual(profile["Heat control"], "unknown")
         self.assertEqual(len(consumption), 1)
         self.assertEqual(consumption[0]["item"], "T-bone steak")
+        self.assertEqual(len(meal_plan), 2)
+        self.assertEqual(meal_plan[0]["status"], "conditional")
+        self.assertEqual(meal_plan[0]["calories"], "700-1100")
+        self.assertIn("sodium is likely high", meal_plan[0]["balance"])
         self.assertEqual(people, {})
         self.assertEqual(recipes["recipes"], [])
         self.assertEqual(inspiration["ideas"], [])
@@ -74,6 +79,7 @@ class KitchenTest(unittest.TestCase):
                 cooking_log,
                 profile,
                 consumption,
+                meal_plan,
                 people,
             ) = KITCHEN.load_and_validate(kitchen)
 
@@ -85,6 +91,7 @@ class KitchenTest(unittest.TestCase):
             self.assertEqual(profile["Usual meal size"], "unknown")
             self.assertEqual(profile["Recipe independence"], "unknown")
             self.assertEqual(consumption, [])
+            self.assertEqual(meal_plan, [])
             self.assertEqual(people, {})
 
     def test_people_flavor_profile_parses_all_dimensions(self) -> None:
@@ -296,6 +303,36 @@ class KitchenTest(unittest.TestCase):
         self.assertIn("medicine=0", result.stdout)
         self.assertIn("pet wet food=0", result.stdout)
         self.assertIn("Consumption entries: 1", result.stdout)
+        self.assertIn("Active meal-plan slots: 2", result.stdout)
+        self.assertIn("Conditional meal-plan slots: 2", result.stdout)
+
+    def test_plan_reports_nutrition_and_balance(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            kitchen = Path(directory) / "kitchen"
+            KITCHEN.initialize(kitchen, force=False)
+            tomorrow = (date.today() + timedelta(days=1)).isoformat()
+            (kitchen / "meal-plan.md").write_text(
+                "# Meal Plan\n\n"
+                "Last updated: 2026-07-13T15:00:00Z\n\n"
+                "## Meals\n\n"
+                f"{KITCHEN.MEAL_PLAN_HEADER}\n"
+                f"{KITCHEN.MEAL_PLAN_SEPARATOR}\n"
+                f"| {tomorrow} | dinner | 2 adults | 2 | planned | Familiar chili | "
+                "bean chili, spinach | Reheat chili. | 550-650 | 25-30 | 65-75 | "
+                "18-24 | 12-16 | 800-1100 | Strong protein and fiber. | Estimated. |\n"
+            )
+
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "plan", str(kitchen), "--days", "2"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertIn("dinner — planned — Familiar chili", result.stdout)
+            self.assertIn("550-650 kcal", result.stdout)
+            self.assertIn("25-30 g protein", result.stdout)
+            self.assertIn("Balance: Strong protein and fiber.", result.stdout)
 
     def test_find_searches_inventory_and_pantry(self) -> None:
         result = subprocess.run(
@@ -365,6 +402,24 @@ class KitchenTest(unittest.TestCase):
             with self.assertRaisesRegex(KITCHEN.KitchenError, "must have 9 columns"):
                 KITCHEN.load_and_validate(kitchen)
 
+    def test_validation_rejects_invalid_meal_plan_nutrition_range(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            kitchen = Path(directory) / "kitchen"
+            KITCHEN.initialize(kitchen, force=False)
+            (kitchen / "meal-plan.md").write_text(
+                "# Meal Plan\n\n"
+                "Last updated: 2026-07-13T15:00:00Z\n\n"
+                "## Meals\n\n"
+                f"{KITCHEN.MEAL_PLAN_HEADER}\n"
+                f"{KITCHEN.MEAL_PLAN_SEPARATOR}\n"
+                "| 2026-07-14 | lunch | 2 adults | 2 | planned | Chili | bean chili | "
+                "Reheat. | 700-500 | unknown | unknown | unknown | unknown | unknown | "
+                "unknown | Bad range for test. |\n"
+            )
+
+            with self.assertRaisesRegex(KITCHEN.KitchenError, "range must go from low to high"):
+                KITCHEN.load_and_validate(kitchen)
+
     def test_skill_requires_post_cook_leftover_reconciliation(self) -> None:
         skill = (ROOT / "skills" / "letem-cook" / "SKILL.md").read_text()
 
@@ -396,6 +451,15 @@ class KitchenTest(unittest.TestCase):
         self.assertIn("Generate a shopping list for me", skill)
         self.assertIn("pet wet food", skill)
         self.assertIn("tea and coffee", skill)
+        self.assertIn("Plan meals across time", skill)
+        self.assertIn("Treat pantry coverage as a constraint, not an objective", skill)
+        self.assertIn("Do not recommend wildly new recipes", skill)
+        self.assertIn("ask what dish or cuisine direction", skill)
+        self.assertIn("meal-plan.md", skill)
+        self.assertIn("Estimate nutrition and balance meals", skill)
+        self.assertIn("calories, protein, carbohydrates, fat, fiber, and sodium", skill)
+        self.assertIn("USDA FoodData Central", skill)
+        self.assertIn("Do not invent calorie, macro, weight, or medical targets", skill)
 
 
 if __name__ == "__main__":

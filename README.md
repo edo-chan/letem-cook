@@ -6,6 +6,8 @@ Let Em Cook is an agentic-kitchen skill that turns persistent kitchen and pantry
 - a separate agentic pantry organized into food, drink, medicine, and pet-supply categories
 - confirmed eating, drinking, pantry use, and pet-feeding history
 - prepared leftovers that should become the next meal
+- durable multi-meal planning with reservations, status, and completion
+- per-serving calorie and basic nutrient estimates with a meal-balance check
 - a personal recipe inventory
 - recipe inspiration based on what is available or needs to be used
 - usual meal size, food preferences, variations, and substitutions
@@ -32,6 +34,7 @@ Use $letem-cook to record that I drank one cup of coffee.
 Use $letem-cook to tell me whether I have pasta and whether I should buy more.
 Use $letem-cook to check whether I can cook chicken lo mein tonight.
 Use $letem-cook to generate a shopping list from my inventory, preferences, and meal size.
+Use $letem-cook to plan lunch and dinner for two tomorrow and estimate each meal's nutrition.
 Use $letem-cook to tell me what I can cook tonight in 30 minutes.
 Use $letem-cook to save this recipe and suggest two vegetarian variations.
 Use $letem-cook to prioritize ingredients that expire this week.
@@ -47,6 +50,7 @@ python3 skills/letem-cook/scripts/kitchen.py validate
 python3 skills/letem-cook/scripts/kitchen.py status
 python3 skills/letem-cook/scripts/kitchen.py match
 python3 skills/letem-cook/scripts/kitchen.py find pasta
+python3 skills/letem-cook/scripts/kitchen.py plan --days 7
 ```
 
 By default this creates private, persistent memory at `~/.letem-cook`. Set `LETEM_COOK_HOME` or pass a directory argument to use another location:
@@ -56,6 +60,7 @@ By default this creates private, persistent memory at `~/.letem-cook`. Set `LETE
 ├── inventory.md
 ├── pantry.md
 ├── consumption-log.md
+├── meal-plan.md
 ├── cooking-log.md
 ├── people.md
 ├── profile.md
@@ -63,17 +68,18 @@ By default this creates private, persistent memory at `~/.letem-cook`. Set `LETE
 └── inspiration.json
 ```
 
-`inventory.md` is the canonical active ingredient and leftover memory. `pantry.md` separately tracks longer-lived pantry goods, tea and coffee, medicine, and pet supplies; non-human categories are excluded from human food matching. `consumption-log.md` records confirmed eating, drinking, usage, and pet feeding. `profile.md` remembers household meal patterns and six cooking-level dimensions, while `people.md` keeps each person's flavor profile. After every cooking session, the agent asks what ingredients, pantry goods, and portions remain, gathers attributed feedback, summarizes agreement and differences, and records the outcome in `cooking-log.md`. Safe leftovers are offered as the next meal before cooking something new. Keep this directory private; personal kitchen memory is intentionally not stored in the public repository.
+`inventory.md` is the canonical active ingredient and leftover memory. `pantry.md` separately tracks longer-lived pantry goods, tea and coffee, medicine, and pet supplies; non-human categories are excluded from human food matching. `consumption-log.md` records confirmed eating, drinking, usage, and pet feeding. `meal-plan.md` persists future meal slots, reserved foods, status, and approximate per-serving calories, protein, carbohydrates, fat, fiber, sodium, and balance. `profile.md` remembers household meal patterns, nutrition priorities, and six cooking-level dimensions, while `people.md` keeps each person's flavor profile. After every cooking session, the agent asks what ingredients, pantry goods, and portions remain, gathers attributed feedback, summarizes agreement and differences, and records the outcome in `cooking-log.md`. Safe leftovers and familiar dishes are preferred; if nothing meaningfully matches, the skill asks before proposing a new dish. Keep this directory private; personal kitchen memory is intentionally not stored in the public repository.
 
 See [the data model](skills/letem-cook/references/data-model.md) for the record formats.
 
 ## Example kitchen
 
-The bundled [example kitchen](skills/letem-cook/examples/ed-kitchen) uses Ed's real starter inventory and pantry, including miso, rice noodles, pasta, tea, and coffee. It also records the confirmed half-steak consumption. Unknown quantities, storage, cooking levels, and dates remain unknown on purpose.
+The bundled [example kitchen](skills/letem-cook/examples/ed-kitchen) uses Ed's real starter inventory and pantry, including miso, rice noodles, pasta, tea, and coffee. It records the confirmed half-steak consumption and a conditional lunch-and-dinner plan for two with nutrition ranges and balance notes. Unknown quantities, storage, cooking levels, and dates remain unknown on purpose.
 
 ```bash
 python3 skills/letem-cook/scripts/kitchen.py validate skills/letem-cook/examples/ed-kitchen
 python3 skills/letem-cook/scripts/kitchen.py status skills/letem-cook/examples/ed-kitchen
+python3 skills/letem-cook/scripts/kitchen.py plan skills/letem-cook/examples/ed-kitchen --days 7
 ```
 
 ## Development
