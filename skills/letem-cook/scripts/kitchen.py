@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 
-FILES = ("inventory.md", "cooking-log.md", "recipes.json", "inspiration.json")
+FILES = ("inventory.md", "cooking-log.md", "profile.md", "recipes.json", "inspiration.json")
 INVENTORY_HEADER = (
     "| ID | Ingredient | Quantity | Unit | Category | Location | Use by | Opened | Notes |"
 )
@@ -126,6 +126,41 @@ def validate_cooking_log(path: Path) -> str:
     return content
 
 
+def load_profile(path: Path) -> dict[str, str]:
+    try:
+        content = path.read_text(encoding="utf-8")
+    except FileNotFoundError as error:
+        raise KitchenError(f"missing {path}") from error
+    required_headings = ("# Kitchen Profile", "## Meal pattern", "## Preferences")
+    for heading in required_headings:
+        if heading not in content:
+            raise KitchenError(f"{path} is missing '{heading}'")
+    required_fields = (
+        "Usual meal size",
+        "Usual diners",
+        "Desired leftover portions",
+        "Likes",
+        "Dislikes",
+        "Dietary restrictions",
+        "Allergies",
+        "Preferred cuisines",
+        "Spice level",
+        "Texture preferences",
+        "Effort preference",
+        "Leftover preference",
+    )
+    values: dict[str, str] = {}
+    for line in content.splitlines():
+        if not line.startswith("- ") or ":" not in line:
+            continue
+        name, value = line[2:].split(":", maxsplit=1)
+        values[name.strip()] = value.strip()
+    missing = [field for field in required_fields if not values.get(field)]
+    if missing:
+        raise KitchenError(f"{path} is missing profile values: {', '.join(missing)}")
+    return values
+
+
 def validate_recipes(data: dict[str, Any]) -> None:
     require_fields(data, ("schema_version", "recipes"), "recipes")
     if data["schema_version"] != 1:
@@ -208,14 +243,15 @@ def validate_inspiration(data: dict[str, Any]) -> None:
 
 def load_and_validate(
     kitchen: Path,
-) -> tuple[list[dict[str, str]], dict[str, Any], dict[str, Any], str]:
+) -> tuple[list[dict[str, str]], dict[str, Any], dict[str, Any], str, dict[str, str]]:
     inventory = load_inventory(kitchen / "inventory.md")
     cooking_log = validate_cooking_log(kitchen / "cooking-log.md")
+    profile = load_profile(kitchen / "profile.md")
     recipes = load_json(kitchen / "recipes.json")
     inspiration = load_json(kitchen / "inspiration.json")
     validate_recipes(recipes)
     validate_inspiration(inspiration)
-    return inventory, recipes, inspiration, cooking_log
+    return inventory, recipes, inspiration, cooking_log, profile
 
 
 def initialize(kitchen: Path, force: bool) -> None:
@@ -245,13 +281,54 @@ def quantity_is_available(quantity: str) -> bool:
     return quantity.casefold().strip() not in {"0", "0.0", "none", "empty"}
 
 
+def ready_leftovers(inventory: list[dict[str, str]]) -> list[dict[str, str]]:
+    today = date.today()
+    leftovers = []
+    for item in inventory:
+        if item["category"].casefold() != "leftover" or not quantity_is_available(item["quantity"]):
+            continue
+        if item["use_by"].casefold() == "unknown":
+            continue
+        use_by = parse_date(item["use_by"], f"leftover {item['id']}.use_by")
+        if use_by is not None and use_by < today:
+            continue
+        leftovers.append(item)
+    return sorted(
+        leftovers,
+        key=lambda item: (item["use_by"].casefold() == "unknown", item["use_by"], item["name"]),
+    )
+
+
+def show_leftovers(inventory: list[dict[str, str]]) -> None:
+    leftovers = ready_leftovers(inventory)
+    if not leftovers:
+        return
+    print("Eat leftovers first:")
+    for item in leftovers:
+        print(f"- {item['name']} ({item['quantity']} {item['unit']}, use by {item['use_by']})")
+
+
+def leftovers_needing_review(inventory: list[dict[str, str]]) -> list[dict[str, str]]:
+    return [
+        item
+        for item in inventory
+        if item["category"].casefold() == "leftover"
+        and quantity_is_available(item["quantity"])
+        and item["use_by"].casefold() == "unknown"
+    ]
+
+
 def show_status(kitchen: Path, days: int) -> None:
-    inventory, recipes, inspiration, cooking_log = load_and_validate(kitchen)
+    inventory, recipes, inspiration, cooking_log, profile = load_and_validate(kitchen)
     expiring = expiring_items(inventory, days)
+    leftovers = ready_leftovers(inventory)
     pending = "None." not in cooking_log.split("## Cooked meals", maxsplit=1)[0]
     print(f"Ingredients: {len(inventory)}")
     print(f"Recipes: {len(recipes['recipes'])}")
     print(f"Inspiration ideas: {len(inspiration['ideas'])}")
+    print(f"Usual meal size: {profile['Usual meal size']}")
+    print(f"Ready leftover meals: {len(leftovers)}")
+    print(f"Leftovers needing date review: {len(leftovers_needing_review(inventory))}")
     print(f"Pending inventory check: {'yes' if pending else 'no'}")
     print(f"Expiring within {days} days: {len(expiring)}")
     for item in expiring:
@@ -263,7 +340,10 @@ def normalize_name(value: str) -> str:
 
 
 def match_recipes(kitchen: Path, top: int, days: int) -> None:
-    inventory, recipes, _, _ = load_and_validate(kitchen)
+    inventory, recipes, _, _, _ = load_and_validate(kitchen)
+    show_leftovers(inventory)
+    if ready_leftovers(inventory):
+        print()
     available = {
         normalize_name(item["name"]): item
         for item in inventory
