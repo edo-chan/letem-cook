@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Initialize, validate, summarize, and match a Let Em Cook kitchen."""
+"""Initialize, validate, summarize, find, and match a Let Em Cook kitchen."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from typing import Any
 FILES = (
     "inventory.md",
     "pantry.md",
+    "consumption-log.md",
     "cooking-log.md",
     "people.md",
     "profile.md",
@@ -30,13 +31,35 @@ PANTRY_HEADER = "| ID | Item | Quantity | Unit | Category | Location | Best by |
 PANTRY_CATEGORIES = (
     "seasonings",
     "ramen",
+    "noodles and pasta",
     "condiments",
+    "tea and coffee",
     "medicine",
     "snacks",
     "pancake or cake mixes",
     "cereal",
+    "pet wet food",
+    "pet dry food",
+    "pet supplies",
     "other",
 )
+NON_RECIPE_PANTRY_CATEGORIES = {
+    "medicine",
+    "pet wet food",
+    "pet dry food",
+    "pet supplies",
+}
+COOKING_DIMENSIONS = (
+    "Knife and prep",
+    "Heat control",
+    "Timing and multitasking",
+    "Seasoning and tasting",
+    "Technique range",
+    "Recipe independence",
+)
+CONSUMPTION_HEADER = "| Date | Item | Amount | Unit | Consumer | Source | Notes |"
+CONSUMPTION_SEPARATOR = "| --- | --- | --- | --- | --- | --- | --- |"
+CONSUMPTION_SOURCES = {"inventory", "pantry", "meal", "outside", "unknown"}
 
 
 class KitchenError(ValueError):
@@ -204,12 +227,59 @@ def validate_cooking_log(path: Path) -> str:
     return content
 
 
+def load_consumption_log(path: Path) -> list[dict[str, str]]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError as error:
+        raise KitchenError(f"missing {path}") from error
+    if not lines or lines[0] != "# Consumption Log":
+        raise KitchenError(f"{path} must start with '# Consumption Log'")
+    if not any(line.startswith("Last updated: ") for line in lines):
+        raise KitchenError(f"{path} is missing the Last updated line")
+    if "## Entries" not in lines:
+        raise KitchenError(f"{path} is missing '## Entries'")
+    try:
+        header_index = lines.index(CONSUMPTION_HEADER)
+    except ValueError as error:
+        raise KitchenError(f"{path} is missing the consumption table header") from error
+    if header_index + 1 >= len(lines) or lines[header_index + 1] != CONSUMPTION_SEPARATOR:
+        raise KitchenError(f"{path} has an invalid consumption table separator")
+
+    entries: list[dict[str, str]] = []
+    fields = ("date", "item", "amount", "unit", "consumer", "source", "notes")
+    for line_number, line in enumerate(lines[header_index + 2 :], start=header_index + 3):
+        if not line.startswith("|"):
+            break
+        values = [value.strip() for value in line.strip().strip("|").split("|")]
+        if len(values) != len(fields):
+            raise KitchenError(
+                f"consumption-log.md line {line_number} must have {len(fields)} columns"
+            )
+        entry = dict(zip(fields, values, strict=True))
+        context = f"consumption-log.md line {line_number}"
+        parse_date(entry["date"], f"{context}.date")
+        for field in ("item", "amount", "unit", "consumer"):
+            if not entry[field]:
+                raise KitchenError(f"{context}.{field} must be non-empty")
+        if entry["source"].casefold() not in CONSUMPTION_SOURCES:
+            raise KitchenError(
+                f"{context}.source must be one of: {', '.join(sorted(CONSUMPTION_SOURCES))}"
+            )
+        entries.append(entry)
+    return entries
+
+
 def load_profile(path: Path) -> dict[str, str]:
     try:
         content = path.read_text(encoding="utf-8")
     except FileNotFoundError as error:
         raise KitchenError(f"missing {path}") from error
-    required_headings = ("# Kitchen Profile", "## Meal pattern", "## Preferences")
+    required_headings = (
+        "# Kitchen Profile",
+        "## Meal pattern",
+        "## Cooking level",
+        "## Preferences",
+    )
     for heading in required_headings:
         if heading not in content:
             raise KitchenError(f"{path} is missing '{heading}'")
@@ -217,6 +287,7 @@ def load_profile(path: Path) -> dict[str, str]:
         "Usual meal size",
         "Usual diners",
         "Desired leftover portions",
+        *COOKING_DIMENSIONS,
         "Likes",
         "Dislikes",
         "Dietary restrictions",
@@ -236,6 +307,20 @@ def load_profile(path: Path) -> dict[str, str]:
     missing = [field for field in required_fields if not values.get(field)]
     if missing:
         raise KitchenError(f"{path} is missing profile values: {', '.join(missing)}")
+    for dimension in COOKING_DIMENSIONS:
+        value = values[dimension].casefold()
+        if value == "unknown":
+            continue
+        try:
+            level = int(value)
+        except ValueError as error:
+            raise KitchenError(
+                f"{path} {dimension} must be unknown or an integer from 1 to 10"
+            ) from error
+        if not 1 <= level <= 10:
+            raise KitchenError(
+                f"{path} {dimension} must be unknown or an integer from 1 to 10"
+            )
     return values
 
 
@@ -381,18 +466,20 @@ def load_and_validate(
     dict[str, Any],
     str,
     dict[str, str],
+    list[dict[str, str]],
     dict[str, dict[str, str]],
 ]:
     inventory = load_inventory(kitchen / "inventory.md")
     pantry = load_pantry(kitchen / "pantry.md")
     cooking_log = validate_cooking_log(kitchen / "cooking-log.md")
+    consumption = load_consumption_log(kitchen / "consumption-log.md")
     profile = load_profile(kitchen / "profile.md")
     people = load_people(kitchen / "people.md")
     recipes = load_json(kitchen / "recipes.json")
     inspiration = load_json(kitchen / "inspiration.json")
     validate_recipes(recipes)
     validate_inspiration(inspiration)
-    return inventory, pantry, recipes, inspiration, cooking_log, profile, people
+    return inventory, pantry, recipes, inspiration, cooking_log, profile, consumption, people
 
 
 def initialize(kitchen: Path, force: bool) -> None:
@@ -460,8 +547,8 @@ def leftovers_needing_review(inventory: list[dict[str, str]]) -> list[dict[str, 
 
 
 def show_status(kitchen: Path, days: int) -> None:
-    inventory, pantry, recipes, inspiration, cooking_log, profile, people = load_and_validate(
-        kitchen
+    inventory, pantry, recipes, inspiration, cooking_log, profile, consumption, people = (
+        load_and_validate(kitchen)
     )
     expiring = expiring_items(inventory, days)
     leftovers = ready_leftovers(inventory)
@@ -479,7 +566,12 @@ def show_status(kitchen: Path, days: int) -> None:
     print(f"Recipes: {len(recipes['recipes'])}")
     print(f"Inspiration ideas: {len(inspiration['ideas'])}")
     print(f"Usual meal size: {profile['Usual meal size']}")
+    print(
+        "Cooking levels: "
+        + ", ".join(f"{name}={profile[name]}" for name in COOKING_DIMENSIONS)
+    )
     print(f"People profiles: {len(people)}")
+    print(f"Consumption entries: {len(consumption)}")
     print(f"Ready leftover meals: {len(leftovers)}")
     print(f"Leftovers needing date review: {len(leftovers_needing_review(inventory))}")
     print(f"Pending inventory check: {'yes' if pending else 'no'}")
@@ -492,12 +584,35 @@ def normalize_name(value: str) -> str:
     return " ".join(value.casefold().strip().split())
 
 
+def find_items(kitchen: Path, query: str) -> None:
+    inventory, pantry, *_ = load_and_validate(kitchen)
+    needle = normalize_name(query)
+    matches = [
+        (source, item)
+        for source, items in (("inventory", inventory), ("pantry", pantry))
+        for item in items
+        if needle in normalize_name(item["name"])
+    ]
+    if not matches:
+        print(f"No match for: {query}")
+        return
+    for source, item in matches:
+        print(
+            f"{item['name']} — {item['quantity']} {item['unit']} in {source}; "
+            f"location {item['location']}; date {item['use_by']}; opened {item['opened']}"
+        )
+
+
 def match_recipes(kitchen: Path, top: int, days: int) -> None:
-    inventory, pantry, recipes, _, _, _, _ = load_and_validate(kitchen)
+    inventory, pantry, recipes, *_ = load_and_validate(kitchen)
     show_leftovers(inventory)
     if ready_leftovers(inventory):
         print()
-    food_pantry = [item for item in pantry if item["category"].casefold() != "medicine"]
+    food_pantry = [
+        item
+        for item in pantry
+        if item["category"].casefold() not in NON_RECIPE_PANTRY_CATEGORIES
+    ]
     available = {
         normalize_name(item["name"]): item
         for item in [*inventory, *food_pantry]
@@ -545,6 +660,10 @@ def build_parser() -> argparse.ArgumentParser:
     match_parser.add_argument("kitchen", nargs="?", type=Path, default=default_kitchen())
     match_parser.add_argument("--top", type=int, default=5)
     match_parser.add_argument("--days", type=int, default=7)
+
+    find_parser = subparsers.add_parser("find", help="find an item at home")
+    find_parser.add_argument("query")
+    find_parser.add_argument("kitchen", nargs="?", type=Path, default=default_kitchen())
     return parser
 
 
@@ -564,6 +683,8 @@ def main() -> int:
             if args.top <= 0 or args.days < 0:
                 raise KitchenError("--top must be positive and --days cannot be negative")
             match_recipes(args.kitchen, args.top, args.days)
+        elif args.command == "find":
+            find_items(args.kitchen, args.query)
     except KitchenError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

@@ -1,6 +1,6 @@
 # Kitchen memory model
 
-Let Em Cook uses five Markdown memory files and two structured JSON stores. Dates use `YYYY-MM-DD`; timestamps use ISO 8601 UTC.
+Let Em Cook uses six Markdown memory files and two structured JSON stores. Dates use `YYYY-MM-DD`; timestamps use ISO 8601 UTC.
 
 ## `inventory.md`
 
@@ -32,11 +32,16 @@ Last updated: 2026-07-12T15:00:00Z
 
 - seasonings
 - ramen
+- noodles and pasta
 - condiments
+- tea and coffee
 - medicine
 - snacks
 - pancake or cake mixes
 - cereal
+- pet wet food
+- pet dry food
+- pet supplies
 - other
 
 ## Items
@@ -47,7 +52,26 @@ Last updated: 2026-07-12T15:00:00Z
 | instant-ramen-2026-07-12 | Instant ramen | 5 | packs | ramen | pantry | 2027-01-10 | no |  |
 ```
 
-Use exactly one of the listed category values for every row. Use `unknown` for facts the user did not supply. `Best by` accepts `unknown` or `YYYY-MM-DD`. Medicines may be tracked here for household memory, but must be excluded from recipes, food matching, substitutions, inspiration, snacks, and meals.
+Use exactly one of the listed category values for every row. Use `unknown` for facts the user did not supply. `Best by` accepts `unknown` or `YYYY-MM-DD`. Medicines, pet wet food, pet dry food, and pet supplies must be excluded from human recipes, food matching, substitutions, inspiration, snacks, meals, and food shopping lists.
+
+## `consumption-log.md`
+
+Treat this as the append-only history of confirmed consumption and usage. Update the corresponding inventory or pantry quantity in the same interaction.
+
+```markdown
+# Consumption Log
+
+Last updated: 2026-07-12T19:00:00Z
+
+## Entries
+
+| Date | Item | Amount | Unit | Consumer | Source | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-07-12 | T-bone steak | 0.5 | steak | Ed | meal | Ate half after cooking. |
+| 2026-07-13 | Dry cat food | 1 | cup | Mochi | pantry | Morning feeding. |
+```
+
+Use `inventory`, `pantry`, `meal`, `outside`, or `unknown` for `Source`. Use `unknown` for an unidentified consumer. Do not record planned or inferred consumption.
 
 ## `cooking-log.md`
 
@@ -126,6 +150,15 @@ Last updated: 2026-07-12T15:00:00Z
 - Usual diners: 2 adults
 - Desired leftover portions: 1
 
+## Cooking level
+
+- Knife and prep: 4
+- Heat control: 6
+- Timing and multitasking: 5
+- Seasoning and tasting: 7
+- Technique range: 5
+- Recipe independence: 6
+
 ## Preferences
 
 - Likes: spicy food, citrus, crunchy textures
@@ -140,6 +173,8 @@ Last updated: 2026-07-12T15:00:00Z
 ```
 
 Record `unknown` rather than `none` when the user has not answered. Use `none stated` only after the user confirms no restriction or allergy. Keep one comma-separated line per field so the profile remains easy to scan and update.
+
+Each cooking-level field must be `unknown` or an integer from 1 through 10. Read [cooking-levels.md](cooking-levels.md) for the dimension definitions, evidence policy, and exact instruction-detail rubric.
 
 ## `recipes.json`
 

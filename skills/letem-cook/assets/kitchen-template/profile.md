@@ -8,6 +8,15 @@ Last updated: never
 - Usual diners: unknown
 - Desired leftover portions: unknown
 
+## Cooking level
+
+- Knife and prep: unknown
+- Heat control: unknown
+- Timing and multitasking: unknown
+- Seasoning and tasting: unknown
+- Technique range: unknown
+- Recipe independence: unknown
+
 ## Preferences
 
 - Likes: unknown

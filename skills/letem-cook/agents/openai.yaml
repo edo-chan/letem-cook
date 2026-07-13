@@ -1,4 +1,4 @@
 interface:
   display_name: "Let Em Cook"
-  short_description: "Run an agentic kitchen and categorized pantry"
-  default_prompt: "Use $letem-cook to manage my agentic kitchen and pantry, then suggest what to eat next."
+  short_description: "Run an agentic kitchen, pantry, and shopping list"
+  default_prompt: "Use $letem-cook to check what I have, update consumption, and plan what to cook or buy."
