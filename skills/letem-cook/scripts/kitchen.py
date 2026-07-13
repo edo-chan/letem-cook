@@ -586,12 +586,14 @@ def normalize_name(value: str) -> str:
 
 def find_items(kitchen: Path, query: str) -> None:
     inventory, pantry, *_ = load_and_validate(kitchen)
-    needle = normalize_name(query)
+    needle = set(normalize_name(query).split())
+    if not needle:
+        raise KitchenError("find query cannot be empty")
     matches = [
         (source, item)
         for source, items in (("inventory", inventory), ("pantry", pantry))
         for item in items
-        if needle in normalize_name(item["name"])
+        if needle <= set(normalize_name(item["name"]).split())
     ]
     if not matches:
         print(f"No match for: {query}")
