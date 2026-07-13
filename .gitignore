@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+
+# A user's kitchen is personal working data, not part of the skill.
+/kitchen/
