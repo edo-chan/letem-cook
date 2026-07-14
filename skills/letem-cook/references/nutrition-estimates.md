@@ -21,12 +21,16 @@ Use these coarse defaults when the user wants a practical estimate and no label,
 | Kinder Bueno | one finger | about 120 |
 | Noosa yogurt | 4.5 oz cup | 130-160 |
 | Noosa yogurt | 8 oz cup | 260-320 |
+| Dry cereal, medium bowl | about 1.5 cups | 180-300 |
+| Chocolate-filled cereal, medium bowl | about 1.5 cups | 250-350 |
+| Milk added to a medium cereal bowl | about 1 cup | 100-150 |
 
 ## Choose the best estimate
 
 1. Use the user's stated amount, then a visible or familiar package size, then the standard portion above.
-2. For an unknown amount, select the midpoint of the most plausible range for the headline total.
-3. Include foods that were likely eaten from a described prepared or served meal, even when the exact amount is unresolved.
-4. Count explicitly discarded or uneaten food as zero.
-5. Report one best total first. Follow it with the main assumptions and a range only when the uncertainty is meaningful.
-6. Do not convert an estimate into a confirmed consumption or inventory fact.
+2. Convert contextual portions such as a bowl into the most likely standard amount and preserve the original wording in the consumption note.
+3. For an unknown amount, select the midpoint of the most plausible range for the headline total.
+4. Include foods that were likely eaten from a described prepared or served meal, even when the exact amount is unresolved.
+5. Count explicitly discarded or uneaten food as zero.
+6. Report one best total first. Follow it with the main assumptions and a range only when the uncertainty is meaningful.
+7. Do not convert an estimate into proof that consumption occurred or into an unsupported inventory deduction.

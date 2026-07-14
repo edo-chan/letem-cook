@@ -71,7 +71,9 @@ Last updated: 2026-07-12T19:00:00Z
 | 2026-07-13 | Dry cat food | 1 | cup | Mochi | pantry | Morning feeding. |
 ```
 
-Use the biological food date for a person's food and drink. An item eaten after midnight but after dinner and before the person's main sleep belongs to the preceding food day; preserve a different known clock date in `Notes`. Use the calendar date for pet feeding and non-food household usage. Use `inventory`, `pantry`, `meal`, `outside`, or `unknown` for `Source`. Use `unknown` for an unidentified consumer. Do not record planned or inferred consumption.
+Use the biological food date for a person's food and drink. An item eaten after midnight but after dinner and before the person's main sleep belongs to the preceding food day; preserve a different known clock date in `Notes`. Use the calendar date for pet feeding and non-food household usage. Use `inventory`, `pantry`, `meal`, `outside`, or `unknown` for `Source`. Use `unknown` for an unidentified consumer.
+
+Do not infer that consumption occurred. After consumption is confirmed, however, use a best-estimated quantity rather than `unknown` when portion context supports one. Write estimates as `about N` with a concrete unit and explain the basis in `Notes`, such as `one medium cereal bowl estimated as about 1.5 cups`. Keep the user's reported portion in the note when converting it to a standard unit. Do not deduct an estimated amount from inventory without a compatible confirmed remainder or quantity.
 
 ## `meal-plan.md`
 

@@ -469,7 +469,15 @@ class KitchenTest(unittest.TestCase):
         self.assertIn("references/nutrition-estimates.md", skill)
         self.assertIn("biological food day, not by the midnight clock boundary", skill)
         self.assertIn("after dinner and before the main sleep", skill)
+        self.assertIn("infer the best reasonable amount from context", skill)
+        self.assertIn("Record the quantity with `about`", skill)
         self.assertIn("Do not invent calorie, macro, weight, or medical targets", skill)
+
+        nutrition_defaults = (
+            ROOT / "skills" / "letem-cook" / "references" / "nutrition-estimates.md"
+        ).read_text()
+        self.assertIn("Chocolate-filled cereal, medium bowl", nutrition_defaults)
+        self.assertIn("Milk added to a medium cereal bowl", nutrition_defaults)
 
 
 if __name__ == "__main__":
