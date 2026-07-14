@@ -1,6 +1,6 @@
 # Kitchen memory model
 
-Let Em Cook uses seven Markdown memory files and two structured JSON stores. Dates use `YYYY-MM-DD`; timestamps use ISO 8601 UTC.
+Let Em Cook uses seven Markdown memory files and two structured JSON stores. Dates use `YYYY-MM-DD`; timestamps use ISO 8601 UTC. For a person's food and drink, the consumption date is the biological food day bounded by the person's main sleep, not necessarily the clock date.
 
 ## `inventory.md`
 
@@ -71,7 +71,7 @@ Last updated: 2026-07-12T19:00:00Z
 | 2026-07-13 | Dry cat food | 1 | cup | Mochi | pantry | Morning feeding. |
 ```
 
-Use `inventory`, `pantry`, `meal`, `outside`, or `unknown` for `Source`. Use `unknown` for an unidentified consumer. Do not record planned or inferred consumption.
+Use the biological food date for a person's food and drink. An item eaten after midnight but after dinner and before the person's main sleep belongs to the preceding food day; preserve a different known clock date in `Notes`. Use the calendar date for pet feeding and non-food household usage. Use `inventory`, `pantry`, `meal`, `outside`, or `unknown` for `Source`. Use `unknown` for an unidentified consumer. Do not record planned or inferred consumption.
 
 ## `meal-plan.md`
 
@@ -171,6 +171,7 @@ Last updated: 2026-07-12T15:00:00Z
 - Usual meal size: 2 servings
 - Usual diners: 2 adults
 - Desired leftover portions: 1
+- Food-day boundary: main sleep
 
 ## Cooking level
 
@@ -196,6 +197,8 @@ Last updated: 2026-07-12T15:00:00Z
 ```
 
 Record `unknown` rather than `none` when the user has not answered. Use `none stated` only after the user confirms no restriction or allergy. Keep one comma-separated line per field so the profile remains easy to scan and update. `Nutrition priorities` may contain user-supplied general goals or clinician-provided constraints; never infer them.
+
+Use `Food-day boundary` to group a person's intake history. Default it to `main sleep`; use a user-supplied time only when they prefer a fixed boundary.
 
 Each cooking-level field must be `unknown` or an integer from 1 through 10. Read [cooking-levels.md](cooking-levels.md) for the dimension definitions, evidence policy, and exact instruction-detail rubric.
 
