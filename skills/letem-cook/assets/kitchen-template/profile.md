@@ -7,6 +7,7 @@ Last updated: never
 - Usual meal size: unknown
 - Usual diners: unknown
 - Desired leftover portions: unknown
+- Food-day boundary: main sleep
 
 ## Cooking level
 

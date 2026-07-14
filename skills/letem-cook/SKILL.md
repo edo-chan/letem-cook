@@ -71,10 +71,12 @@ python3 <skill-directory>/scripts/kitchen.py validate
 ## Update consumption
 
 - Treat `consumption-log.md` as the durable record of confirmed eating, drinking, pantry usage, and pet feeding.
+- Group each person's food and drink by biological food day, not by the midnight clock boundary. Use the person's main sleep as the default boundary unless `profile.md` specifies another `Food-day boundary`.
+- Before assigning a near-midnight event, check the reported meal order, local time, surrounding events, and whether the person has started their main sleep. Food eaten after midnight but after dinner and before the main sleep belongs to the preceding biological food day. Ask a short follow-up when the boundary remains ambiguous and would change the answer.
 - When the user says they ate, drank, used, fed, finished, or discarded something, identify the exact `inventory.md` or `pantry.md` row and the amount. Ask a short follow-up only when the amount or batch is ambiguous.
 - Deduct only a confirmed amount. Never infer recipe usage, allow a quantity to fall below zero, or alter similarly named batches without evidence.
 - Mark a package opened when confirmed. Remove an exhausted row unless retaining quantity `0` is historically useful.
-- Append the date, item, amount, unit, consumer, source, and concise notes to `consumption-log.md`. Use `unknown` for an unidentified consumer, and distinguish `inventory`, `pantry`, `meal`, `outside`, or `unknown` sources.
+- Append the biological food date, item, amount, unit, consumer, source, and concise notes to `consumption-log.md`. When a known clock date differs, preserve it in `Notes`. Use `unknown` for an unidentified consumer, and distinguish `inventory`, `pantry`, `meal`, `outside`, or `unknown` sources.
 - For pet food, name the pet as consumer when supplied and update the matching wet- or dry-food row. Do not add pet consumption to a person's flavor profile.
 - Keep cooked-meal reconciliation in `cooking-log.md` too; consumption history does not replace leftover tracking.
 - Update all affected timestamps and validate after the change.
@@ -188,7 +190,7 @@ Store per-serving estimates in `meal-plan.md` for calories, protein, carbohydrat
 - For retrospective calorie questions, always give one headline best estimate that includes uncertain portions and possibly consumed components. Do not omit a food merely because its amount is unknown. Choose the most plausible portion from the meal context, show that assumption, and optionally give a secondary range. Exclude only food that was affirmatively not eaten or discarded.
 - Keep estimated intake separate from confirmed consumption. Never add an inferred food to `consumption-log.md`, deduct inventory, or mark a planned meal completed solely because it was included in a calorie estimate.
 - A planned meal alone is not evidence that it was eaten. A meal the user described preparing, heating, serving, or eating is valid estimation context; include the most likely components unless later evidence says they were not eaten.
-- When a recent eating sequence crosses midnight, prefer the user's apparent eating day over a strict calendar cutoff for phrases such as “today,” and state the time window used when it affects the result.
+- For daily intake summaries, group by the biological food day recorded in `consumption-log.md`. Recheck near-midnight entries against meal order and the main-sleep boundary instead of assuming the stored or current clock date is the intended day.
 - Add component nutrients, divide by the planned servings, and use a low-high range when portion size, takeout composition, cooking fat, sauce, or recipe yield is uncertain. Round sensibly. Preserve unknown inventory facts even while selecting a best nutrition estimate.
 - Keep estimates per serving. Do not silently turn a package's labeled serving into the amount a person will actually eat.
 - Balance first against explicit `Nutrition priorities` in `profile.md`. Without a personal target, use a general plate check: a meaningful protein source, produce and fiber, reasonable energy for the meal, and awareness of sodium. USDA MyPlate's produce guidance and FDA Daily Values can inform the explanation, but daily reference values are not automatic per-meal prescriptions.

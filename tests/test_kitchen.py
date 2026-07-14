@@ -53,6 +53,7 @@ class KitchenTest(unittest.TestCase):
         self.assertEqual(pantry_by_name["Tea"]["category"], "tea and coffee")
         self.assertIn("T-bone steak", cooking_log)
         self.assertEqual(profile["Usual meal size"], "unknown")
+        self.assertEqual(profile["Food-day boundary"], "main sleep")
         self.assertEqual(profile["Heat control"], "unknown")
         self.assertEqual(len(consumption), 1)
         self.assertEqual(consumption[0]["item"], "T-bone steak")
@@ -92,6 +93,7 @@ class KitchenTest(unittest.TestCase):
             self.assertEqual(inspiration["ideas"], [])
             self.assertIn("## Pending inventory check", cooking_log)
             self.assertEqual(profile["Usual meal size"], "unknown")
+            self.assertEqual(profile["Food-day boundary"], "main sleep")
             self.assertEqual(profile["Recipe independence"], "unknown")
             self.assertEqual(consumption, [])
             self.assertEqual(meal_plan, [])
@@ -465,6 +467,8 @@ class KitchenTest(unittest.TestCase):
         self.assertIn("always give one headline best estimate", skill)
         self.assertIn("Do not omit a food merely because its amount is unknown", skill)
         self.assertIn("references/nutrition-estimates.md", skill)
+        self.assertIn("biological food day, not by the midnight clock boundary", skill)
+        self.assertIn("after dinner and before the main sleep", skill)
         self.assertIn("Do not invent calorie, macro, weight, or medical targets", skill)
 
 

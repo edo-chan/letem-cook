@@ -395,6 +395,7 @@ def load_profile(path: Path) -> dict[str, str]:
         "Usual meal size",
         "Usual diners",
         "Desired leftover portions",
+        "Food-day boundary",
         *COOKING_DIMENSIONS,
         "Likes",
         "Dislikes",
