@@ -462,6 +462,9 @@ class KitchenTest(unittest.TestCase):
         self.assertIn("Estimate nutrition and balance meals", skill)
         self.assertIn("calories, protein, carbohydrates, fat, fiber, and sodium", skill)
         self.assertIn("USDA FoodData Central", skill)
+        self.assertIn("always give one headline best estimate", skill)
+        self.assertIn("Do not omit a food merely because its amount is unknown", skill)
+        self.assertIn("references/nutrition-estimates.md", skill)
         self.assertIn("Do not invent calorie, macro, weight, or medical targets", skill)
 
 
